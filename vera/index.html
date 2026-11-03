@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Vera Bring-Up</title>
+<meta name="description" content="Commissioning a Unitree R1 humanoid from an uncommissioned compute module to a scripted arm and hand routine.">
+<meta name="author" content="Ben Wood, STEM Innovation Academy">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:   #F5F7FA;
+    --surface:  #FFFFFF;
+    --sunk:     #EDF0F5;
+    --ink:      #141A24;
+    --muted:    #5A6577;
+    --faint:    #8A94A6;
+    --line:     #DCE1E9;
+    --line-hi:  #C3CBD8;
+    --accent:   #2A4A8F;
+    --accent-w: #E8EDF8;
+    --danger:   #9E2B25;
+    --danger-w: #FBEDEC;
+    --ok:       #1D6349;
+    --ok-w:     #E7F2ED;
+    --hold:     #7A5A16;
+    --hold-w:   #FAF1DC;
+    --shadow:   0 1px 2px rgba(20,26,36,.05), 0 4px 14px rgba(20,26,36,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0E131B;
+      --surface:  #161D28;
+      --sunk:     #1D2530;
+      --ink:      #E6EAF1;
+      --muted:    #9BA6B8;
+      --faint:    #6E7A8D;
+      --line:     #2A3340;
+      --line-hi:  #3B4757;
+      --accent:   #7FA3E8;
+      --accent-w: #1A2740;
+      --danger:   #E8837C;
+      --danger-w: #33191A;
+      --ok:       #6BC49F;
+      --ok-w:     #122A22;
+      --hold:     #D9B364;
+      --hold-w:   #2C2313;
+      --shadow:   0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0E131B;
+    --surface:  #161D28;
+    --sunk:     #1D2530;
+    --ink:      #E6EAF1;
+    --muted:    #9BA6B8;
+    --faint:    #6E7A8D;
+    --line:     #2A3340;
+    --line-hi:  #3B4757;
+    --accent:   #7FA3E8;
+    --accent-w: #1A2740;
+    --danger:   #E8837C;
+    --danger-w: #33191A;
+    --ok:       #6BC49F;
+    --ok-w:     #122A22;
+    --hold:     #D9B364;
+    --hold-w:   #2C2313;
+    --shadow:   0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    padding-inline: 20px;
+    padding-block: 40px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+
+  h1, h2, h3, .lab {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    text-wrap: balance;
+  }
+  h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -.015em; margin: 0 0 6px; line-height: 1.1; }
+  h2 { font-size: 1.28rem; font-weight: 700; margin: 0; letter-spacing: -.005em; }
+  h3 { font-size: 1rem; font-weight: 600; margin: 0 0 8px; }
+  p  { margin: 0 0 12px; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); }
+
+  .lab {
+    font-size: .69rem; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--faint);
+  }
+
+  /* ---- masthead ---- */
+  .top { border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+  .sub { color: var(--muted); font-size: 1.02rem; margin: 0; max-width: 60ch; }
+
+  .strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 3px; overflow: hidden; margin-top: 22px;
+  }
+  .strip div { background: var(--surface); padding: 11px 13px; }
+  .strip b {
+    display: block; font-family: "IBM Plex Mono", monospace;
+    font-size: 1.12rem; font-weight: 500; font-variant-numeric: tabular-nums;
+    margin-top: 3px;
+  }
+
+  /* ---- steps ---- */
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 18px; align-items: start; }
+  .num {
+    font-family: "IBM Plex Mono", monospace; font-size: 1.5rem; font-weight: 500;
+    color: var(--accent); line-height: 1; padding-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .num small { display: block; font-size: .6rem; letter-spacing: .1em; color: var(--faint); margin-top: 7px; }
+  .body { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .goal { color: var(--muted); margin: 6px 0 0; }
+
+  ol.sub { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; }
+  ol.sub > li::marker { color: var(--faint); font-family: "IBM Plex Mono", monospace; font-size: .85em; }
+  ol.sub > li > :first-child { margin-top: 0; }
+  .inline-note {
+    display: block; color: var(--muted); font-size: .88rem;
+    line-height: 1.55; margin-top: 6px; max-width: 62ch;
+    border-left: 2px solid var(--line); padding-left: 10px;
+  }
+
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .87em;
+    background: var(--sunk); padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  pre {
+    font-family: "IBM Plex Mono", monospace; font-size: .82rem; line-height: 1.6;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px 14px; margin: 10px 0 0; overflow-x: auto;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+
+  .note {
+    border-left: 3px solid var(--line-hi); padding: 10px 0 10px 14px;
+    color: var(--muted); font-size: .93rem;
+  }
+  .check { border-left-color: var(--ok); background: var(--ok-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .check .lab { color: var(--ok); }
+  .gate  { border-left-color: var(--danger); background: var(--danger-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .gate .lab { color: var(--danger); }
+  .hold  { border-left-color: var(--hold); background: var(--hold-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .hold .lab { color: var(--hold); }
+  .note .lab { display: block; margin-bottom: 3px; }
+
+  .dep {
+    font-family: "IBM Plex Mono", monospace; font-size: .74rem;
+    color: var(--muted); background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 10px; display: inline-block;
+  }
+
+  hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* ---- closing blocks ---- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 5px; padding: 20px 22px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  ul.plain { margin: 0; padding-left: 19px; display: flex; flex-direction: column; gap: 8px; }
+  ul.plain li::marker { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: "IBM Plex Sans Condensed", sans-serif; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  td:first-child { font-family: "IBM Plex Mono", monospace; font-size: .84em; white-space: nowrap; color: var(--accent); }
+  .scroll { overflow-x: auto; }
+
+  @media (max-width: 460px) {
+    h1 { font-size: 2rem; }
+    .step { grid-template-columns: 34px 1fr; gap: 12px; }
+    .num { font-size: 1.2rem; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <p class="lab">Unitree R1 EDU &middot; 26 + 6 + 6 DOF</p>
+    <h1>Vera Bring-Up</h1>
+    <p class="sub">Vera is STEM Innovation Academy's Unitree R1 humanoid. Her compute module arrived uncommissioned and Unitree publishes almost nothing for this model, so I worked out the bring-up from the robot itself and the SDK source. This is the runbook: six ordered steps from a robot on a stand to a scripted arm-and-hand routine. Each step produces the facts the next one needs. Nothing here trains a policy.</p>
+    <div class="strip">
+      <div><span class="lab">Body DOF</span><b>26</b></div>
+      <div><span class="lab">Per hand</span><b>6</b></div>
+      <div><span class="lab">Onboard</span><b>Orin NX</b></div>
+    </div>
+  </header>
+
+  <div class="note check">
+    <span class="lab">Recon complete &middot; 9 Sep</span>
+    Every gap in this runbook has been replaced with a measured fact. Vera's Orin NX is reachable, her DDS bus is live, and all 91 topics are enumerated. The topic map at the bottom is the reference; the steps below now name real topics rather than guesses.
+  </div>
+
+  <div class="note gate">
+    <span class="lab">The one thing that will waste your day</span>
+    Vera's message namespace is <code>unitree_hg</code>, not <code>unitree_go</code>. Everything you learned on Kepler uses the quadruped IDL, which has a different layout. The only shared type is <code>WirelessController_</code> on <code>rt/wirelesscontroller</code>, because the remote is common hardware.
+  </div>
+
+  <!-- ============ STEP 1 ============ -->
+  <section class="step">
+    <div class="num">01<small>DONE</small></div>
+    <div class="body">
+      <div>
+        <h2>Reconnaissance</h2>
+        <p class="goal">Complete. Kept here because the connection procedure is not obvious and you will need it again.</p>
+      </div>
+
+      <ol class="sub">
+        <li>
+          <b>Ethernet goes into the backpack, not the robot.</b> The R1 body has one RJ45 on its top interface panel, next to the 24V and 36V outputs. That jack reaches the main control board only. The Orin has its own RJ45 on the compute backpack.
+          <span class="inline-note">The backpack ships uncommissioned. Its XT30 power input and its RJ45 were both empty out of the box, which is why the Orin appeared dead. Check power before you debug anything else.</span>
+        </li>
+        <li><b>Workstation static</b> at <code>192.168.123.99</code>, mask <code>255.255.255.0</code>, no gateway.</li>
+        <li>
+          <b>Shell in.</b>
+          <pre><code>ssh unitree@192.168.123.164</code></pre>
+          Pick <code>1</code> for foxy at the ROS prompt. Change the default password on first login.
+        </li>
+        <li>
+          <b>Bind CycloneDDS to her interface</b> or discovery returns nothing. Her NIC is <code>eth10</code>, which nothing would guess.
+          <pre><code>cat &gt; ~/cdds.xml &lt;&lt;'EOF'
+&lt;?xml version="1.0" encoding="UTF-8" ?&gt;
+&lt;CycloneDDS xmlns="https://cdds.io/config"&gt;
+  &lt;Domain id="any"&gt;
+    &lt;General&gt;
+      &lt;Interfaces&gt;
+        &lt;NetworkInterface name="eth10" priority="default" multicast="default" /&gt;
+      &lt;/Interfaces&gt;
+      &lt;AllowMulticast&gt;true&lt;/AllowMulticast&gt;
+    &lt;/General&gt;
+  &lt;/Domain&gt;
+&lt;/CycloneDDS&gt;
+EOF
+echo 'export CYCLONEDDS_URI=file:///home/unitree/cdds.xml' &gt;&gt; ~/.bashrc</code></pre>
+        </li>
+        <li>
+          <b>Verify.</b>
+          <pre><code>ros2 topic list
+timeout 15 ddsls dcpspublication</code></pre>
+        </li>
+      </ol>
+
+      <div class="scroll">
+        <table>
+          <tr><th>Fact</th><th>Value</th></tr>
+          <tr><td>192.168.123.161</td><td>Main control board. Linux, no SSH, ports 8551 and 9991 only. Not for development.</td></tr>
+          <tr><td>192.168.123.164</td><td>Orin NX Developer Kit in the backpack. This is where you work.</td></tr>
+          <tr><td>eth10</td><td>Her only live interface. <code>eth0</code> is down.</td></tr>
+          <tr><td>JetPack</td><td>L4T R35.3.1, Ubuntu 20.04.5, CUDA 11.4, ROS 2 Foxy</td></tr>
+          <tr><td>Hardware</td><td>8 cores, 16 GB RAM, 470 GB NVMe</td></tr>
+          <tr><td>Internet</td><td>None. Default route points at <code>192.168.123.1</code>, which does not exist.</td></tr>
+        </table>
+      </div>
+
+      <div class="note hold">
+        <span class="lab">Do not run hand_set.sh</span>
+        It reads like a setup script. It is a teardown script: it deletes <code>~/brainco_hand_service</code> and removes the <code>brainco_hand.service</code> autostart unit. Back that directory up before you go near it.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ STEP 2 ============ -->
+  <section class="step">
+    <div class="num">02<small>NOW</small></div>
+    <div class="body">
+      <div>
+        <h2>Read her state</h2>
+        <p class="goal">Prove the link end to end. Still no commands.</p>
+      </div>
+
+      <ol class="sub">
+        <li>
+          <b>Start small.</b> Battery telemetry proves the whole type chain without flooding the terminal.
+          <pre><code>timeout 3 ros2 topic echo /lf/bmsstate</code></pre>
+        </li>
+        <li>
+          <b>Then joint state.</b> Use the low-frequency topic first; <code>/lowstate</code> runs at full control rate.
+          <pre><code>ros2 topic echo /lf/lowstate</code></pre>
+        </li>
+        <li><b>The real test: move a joint by hand.</b> With her powered but damped, move an elbow. The printed number must change. That proves you are reading the robot, not a stale buffer.</li>
+        <li><b>Record the joint index map.</b> The official table runs 0 to 30 with <code>EMPTY</code> at 14, 20, 21, 27 and 28. That is 26 real DOF in a 31-slot array. Write down which index moved when you moved the elbow, and confirm it against that table.</li>
+      </ol>
+
+      <div class="note check">
+        <span class="lab">Checkpoint</span>
+        Numbers change when you physically move a joint, and you have a written index map. Observability is what makes every later step debuggable.
+      </div>
+
+      <div class="note">
+        <span class="lab">If ros2 echo cannot resolve the type</span>
+        The Unitree message packages are not in her ROS environment. Fall back to <code>unitree_sdk2_python</code>, which she does not yet have and cannot download. Transfer it from the workstation by <code>scp</code>, or give her a route out first.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ STEP 3 ============ -->
+  <section class="step">
+    <div class="num">03</div>
+    <div class="body">
+      <div>
+        <h2>High-level posture</h2>
+        <p class="goal">First movement under our control, balance safeguards left on.</p>
+        <p><span class="dep">needs step 2</span></p>
+      </div>
+
+      <ol class="sub">
+        <li><b>Hoist her properly.</b> Feet clear of the floor, straps taking full weight, nothing within arm's reach. Non-negotiable, for the reason in the gate below.</li>
+        <li><b>Physical e-stop in your hand</b> before a single command is sent. Test it while she is in zero torque. Also find out what writes to <code>/lf/emergency_stop</code>.</li>
+        <li>
+          <b>The client already exists and is compiled.</b> No code to write.
+          <pre><code>cd ~/unitree_sdk2/build/bin
+./r1_loco_client --network_interface=eth10 --get_fsm_id</code></pre>
+          <span class="inline-note"><b>One command per invocation.</b> The parser loads flags into a <code>std::map</code>, so they execute in alphabetical order, not the order you type. <code>--stand_up --damp</code> runs damp first.</span>
+        </li>
+        <li>
+          <b>Her state machine, read out of <code>r1_loco_client.hpp</code>:</b>
+          <div class="scroll">
+            <table>
+              <tr><th>id</th><th>State</th><th>Flag</th></tr>
+              <tr><td>0</td><td>Zero torque. Motors limp. She boots into this.</td><td><code>--zero_torque</code></td></tr>
+              <tr><td>1</td><td>Damp. The safe holding state.</td><td><code>--damp</code></td></tr>
+              <tr><td>2</td><td>Squat. <b>Wrapper commented out by Unitree.</b></td><td>&mdash;</td></tr>
+              <tr><td>3</td><td>Sit. <b>Wrapper commented out by Unitree.</b></td><td>&mdash;</td></tr>
+              <tr><td>4</td><td>Stand up.</td><td><code>--stand_up</code></td></tr>
+              <tr><td>811</td><td>Start / ready.</td><td><code>--start</code></td></tr>
+            </table>
+          </div>
+        </li>
+        <li><b>Damp before anything else</b>, and return to damp between every experiment. It is the state to reach for without looking.</li>
+        <li><b>Then start, then stand.</b> Whether 811 must precede 4 is unverified. Try <code>--start</code> first and watch what the FSM id reads back as.</li>
+      </ol>
+
+      <div class="note gate">
+        <span class="lab">Safety gate &middot; she has no way down</span>
+        Sit and squat are commented out for the R1. Her only descent paths are <code>--damp</code> and <code>--zero_torque</code>, and both drop her weight onto whatever is underneath. There is no graceful sit. She stays in straps for every command in this step, with a second person in the room.
+      </div>
+
+      <div class="note hold">
+        <span class="lab">Two traps in the source</span>
+        <b>Continuous move is a ten-day command.</b> <code>Move()</code> with <code>continous_move</code> set passes a duration of 864000 seconds. Left at default, every velocity command expires after 1 second, which is a built-in deadman. Do not turn that off.<br><br>
+        <b>Ids 2 and 3 are still reachable</b> via <code>--set_fsm_id=2</code>. A vendor commenting out a call on one model and not another usually means untested. That is a vendor question, not a shortcut.
+      </div>
+
+      <div class="note">
+        <span class="lab">Service name</span>
+        R1's <code>LocoClient</code> declares <code>LOCO_SERVICE_NAME = "sport"</code>, so it talks to <code>rt/api/sport/request</code>, not <code>rt/api/loco/request</code>. Both topics exist on her bus. The client uses sport.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ STEP 4 ============ -->
+  <section class="step">
+    <div class="num">04<small>DEMO</small></div>
+    <div class="body">
+      <div>
+        <h2>Arm actions</h2>
+        <p class="goal">The first demo routine. Twenty-two actions ship on the robot.</p>
+        <p><span class="dep">needs step 3</span></p>
+      </div>
+
+      <ol class="sub">
+        <li>
+          <b>Use the arm action service, not raw <code>arm_sdk</code>.</b> Unitree ships no R1 arm_sdk example, and the G1 one is unsafe here for the reason in the trap below. The action client is already compiled and confirmed working against Vera.
+          <pre><code>cd ~/unitree_sdk2/build/bin
+./g1_arm_action_example --network eth10 --list
+./g1_arm_action_example --network eth10 --id 99</code></pre>
+        </li>
+        <li>
+          <b>Learn <code>99 release_arm</code> first.</b> It hands the arms back. It is your software abort and it belongs in a second terminal, ready, before any other id runs.
+        </li>
+        <li>
+          <b>The safe half of the menu.</b> No person inside arm's reach:
+          <div class="scroll">
+            <table>
+              <tr><th>id</th><th>Action</th><th>id</th><th>Action</th></tr>
+              <tr><td>26</td><td>wave_above_head</td><td>35</td><td>emphasize</td></tr>
+              <tr><td>25</td><td>wave_under_head</td><td>31</td><td>extend_right_arm_forward</td></tr>
+              <tr><td>15</td><td>both_hands_up</td><td>33</td><td>right_hand_on_heart</td></tr>
+              <tr><td>23</td><td>right_hand_up</td><td>24</td><td>ultraman_ray</td></tr>
+              <tr><td>36</td><td>forward_push</td><td>22</td><td>refuse</td></tr>
+              <tr><td>11 12 13</td><td>blow_kiss (both / left / right)</td><td>28 29 30</td><td>box_win variants</td></tr>
+            </table>
+          </div>
+          <span class="inline-note"><b>Contact actions, not before the routine is rehearsed cold:</b> <code>18 high_five</code>, <code>27 shake_hand</code>, <code>19 hug</code>, <code>17 clamp</code>. These put a person inside her working radius by design.</span>
+        </li>
+        <li>
+          <b>Test every id you intend to use, one at a time.</b> This action set was built for a 7-DOF arm and Vera's are 5-DOF. Some will refuse, some may move oddly. Unitree's own error handler says "if an error is still returned at this point, ignore this action", which tells you they expect failures.
+        </li>
+        <li>
+          <b>Watch <code>rt/arm/action/state</code></b> while it runs. It reports what the arm controller thinks it is doing.
+        </li>
+        <li>
+          <b>Custom actions are supported and yours is empty.</b> The list returns <code>[[builtins], []]</code>. The client's <code>--name</code> and <code>--stop</code> flags drive custom actions, which is the route to a bespoke STEMIA routine.
+        </li>
+      </ol>
+
+      <div class="note gate">
+        <span class="lab">Safety gate</span>
+        Actions refuse unless she is in an active FSM state, so Step 3 comes first and she is hoisted. Clear a full arm's radius. Have <code>--id 99</code> queued in a second terminal before the first run. Actions are all under 10 seconds, so nothing you trigger runs away.
+      </div>
+
+      <div class="note hold">
+        <span class="lab">Never run g1_arm5_sdk_dds_example against Vera</span>
+        It writes its authority weight into <code>motor_cmd[29]</code>, which on the G1 is empty padding. <b>On the R1, index 29 is HEAD_PITCH.</b> The ramp goes to 1.0 radian against a limit of &plusmn;0.63. It also commands waist indices 12 and 13, which are transposed relative to Vera, and index 14, which has no motor. Written for a robot with a different joint count.
+      </div>
+
+      <div class="note check">
+        <span class="lab">Checkpoint</span>
+        One chosen action runs three times identically, with release_arm cleanly returning control each time. Repeatability is what makes it demo-safe.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ STEP 5 ============ -->
+  <section class="step">
+    <div class="num">05<small>DONE</small></div>
+    <div class="body">
+      <div>
+        <h2>The hands</h2>
+        <p class="goal">Open and close both hands, then fold them into the arm routine.</p>
+        <p><span class="dep">needs step 2</span></p>
+      </div>
+
+      <ol class="sub">
+        <li>
+          <b>Start the hand server.</b> It runs in the foreground and holds the serial ports. Leave that terminal alone.
+          <pre><code>cd ~/brainco_hand_service/bin
+sudo ./brainco_hand_server --network eth10</code></pre>
+          <span class="inline-note">The README says <code>eth0</code> because it was written for a G1. Vera's interface is <code>eth10</code>. That one substitution is the difference between working and silently finding nothing.</span>
+        </li>
+        <li>
+          <b>Expect this.</b> The failed probe is the server trying ports in order until a device answers, not an error.
+          <pre><code>left hand bound to /dev/ttyHAND0 port
+right hand bound to /dev/ttyHAND1 port
+Starting worker for left (slave 126)
+Starting worker for right (slave 127)</code></pre>
+        </li>
+        <li>
+          <b>Second SSH session, run the test.</b> The hand opens and closes on a loop until you stop it.
+          <pre><code>cd ~/brainco_hand_service/bin
+sudo ./test_brainco_hand_server left
+# Ctrl+C to stop, then:
+sudo ./test_brainco_hand_server right</code></pre>
+        </li>
+        <li>
+          <b>Then write your own commands.</b> Topics are <code>rt/brainco/{left,right}/{cmd,state}</code>, not the <code>dex3</code> names. Position and speed are both normalised 0 to 1, and Unitree recommends speed 1.0 on every finger.
+          <pre><code>finger order: [Thumb, Thumb_aux, Index, Middle, Ring, Pinky]</code></pre>
+          Six values per hand, which is where the 6 DOF goes: two thumb joints plus four fingers.
+        </li>
+      </ol>
+
+      <div class="note check">
+        <span class="lab">Checkpoint &middot; cleared 10 Sep</span>
+        Left hand clenching and opening on command. That proves the whole chain: workstation, backpack ethernet, Orin, CycloneDDS on eth10, CH343 serial bridge, BrainCo motor. Nothing in that path is theoretical now.
+      </div>
+
+      <div class="note hold">
+        <span class="lab">Do not run hand_set.sh</span>
+        It reads like setup and is actually a teardown: it deletes <code>~/brainco_hand_service</code> and removes the autostart unit. A backup is at <code>~/brainco_hand_service.bak</code>.
+      </div>
+
+      <div class="note">
+        <span class="lab">Loose end</span>
+        Something publishes <code>rt/dex3/{left,right}/state</code> even with the BrainCo server stopped, and it does not hold the serial ports. Worth identifying before the hands go into the arm routine, so two things are not claiming them during a demo.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ STEP 6 ============ -->
+  <section class="step">
+    <div class="num">06<small>DONE</small></div>
+    <div class="body">
+      <div>
+        <h2>Camera frames</h2>
+        <p class="goal">Get frames off the head. Foundation for vision work later.</p>
+      </div>
+
+      <ol class="sub">
+        <li>
+          <b>Both cameras are plain V4L2 devices.</b> The binocular module is two independent USB cameras, four video nodes. Exact parameters, taken from Unitree's own commissioning history on this robot:
+          <pre><code>ffplay -f v4l2 -input_format mjpeg -video_size 2688x1520 -i /dev/video0
+ffplay -f v4l2 -input_format mjpeg -video_size 2688x1520 -i /dev/video2</code></pre>
+        </li>
+        <li><b>Grab one frame and write it to disk.</b> That is the whole goal. A file you can open. OpenCV with the same MJPEG and size settings.</li>
+        <li><b>The DDS route exists too</b> via <code>rt/api/videohub/request</code> and <code>rt/frontvideostream</code>. Use it when you want frames off-robot rather than on it.</li>
+      </ol>
+
+      <div class="note check">
+        <span class="lab">Checkpoint &middot; cleared 10 Sep</span>
+        Frame captured from <code>/dev/video0</code> at 2688&times;1520, three channels, written to disk. Everything downstream is ordinary computer vision on an Orin, with nothing Unitree-specific about it. Two eyes a known baseline apart is also the raw material for stereo depth.
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ TOPIC MAP ============ -->
+  <section class="panel">
+    <h2>Topic map</h2>
+    <p class="sub">Measured on 9 Sep from the Orin. 91 topics total; these are the ones that matter. Types are <code>unitree_hg</code> unless noted.</p>
+    <div class="scroll">
+      <table>
+        <tr><th>Topic</th><th>Type</th><th>Use</th></tr>
+        <tr><td>rt/lowstate</td><td>LowState_</td><td>Joint state, full rate. Publishing now.</td></tr>
+        <tr><td>rt/lf/lowstate</td><td>LowState_</td><td>Same, low frequency. Start here.</td></tr>
+        <tr><td>rt/arm_sdk</td><td>LowCmd_</td><td><b>Arm control with balance left on. Step 4.</b></td></tr>
+        <tr><td>rt/lowcmd</td><td>LowCmd_</td><td>Full low-level authority. Not used here.</td></tr>
+        <tr><td>rt/arm/action/state</td><td>String_</td><td>What the arm controller thinks it is doing.</td></tr>
+        <tr><td>rt/api/sport/request</td><td>Request_</td><td><b>Posture and locomotion. Step 3.</b> R1's LocoClient uses the sport service, not loco.</td></tr>
+        <tr><td>rt/api/motion_switcher/request</td><td>Request_</td><td>Mode changes. Required before low-level.</td></tr>
+        <tr><td>/dex3/left/cmd</td><td>HandCmd_</td><td>Left hand command. Step 5.</td></tr>
+        <tr><td>/dex3/right/cmd</td><td>HandCmd_</td><td>Right hand command.</td></tr>
+        <tr><td>rt/dex3/left/state</td><td>HandState_</td><td>Left hand feedback. Publishing now.</td></tr>
+        <tr><td>rt/lf/bmsstate</td><td>BmsState_</td><td>Battery. Smallest safe first read.</td></tr>
+        <tr><td>rt/sportmodestate</td><td>SportModeState_</td><td>High-level body state.</td></tr>
+        <tr><td>rt/secondary_imu</td><td>IMUState_</td><td>IMU.</td></tr>
+        <tr><td>rt/wirelesscontroller</td><td>WirelessController_</td><td>The remote. <code>unitree_go</code> type.</td></tr>
+        <tr><td>rt/api/voice/request</td><td>Request_</td><td>Speech. <code>unitree_api</code> type.</td></tr>
+        <tr><td>rt/api/gpt/request</td><td>Request_</td><td>Her language stack. Also <code>rt/gpt_cmd</code>, <code>rt/gpt_state</code>.</td></tr>
+        <tr><td>rt/api/videohub/request</td><td>Request_</td><td>Camera over DDS.</td></tr>
+        <tr><td>/lf/emergency_stop</td><td>&mdash;</td><td>Find out what writes to this before commanding anything.</td></tr>
+        <tr><td>rt/api/bashrunner/request</td><td>Request_</td><td>Runs shell commands. No auth. See below.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <hr>
+
+  <!-- ============ SECURITY ============ -->
+  <section class="panel">
+    <h2>Why Vera stays on an isolated wire</h2>
+    <p><code>rt/api/bashrunner/request</code> is a service that executes shell commands, reachable by anything that can put a packet on this subnet, with no authentication in the DDS layer. That is normal for a robot development bus and it is not a defect to report. It is the reason Vera never touches the school network, and it belongs in the lab's safety documentation alongside the physical hazards.</p>
+  </section>
+
+  <hr>
+
+  <!-- ============ NOT DOING ============ -->
+  <section class="panel">
+    <h2>What this runbook deliberately leaves out</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>Why not</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>RL training</td>
+            <td>The R1 is absent from <code>unitree_rl_lab</code>. Its only RL path is <code>unitree_rl_mjlab</code>, which is MuJoCo rather than Isaac Lab. A humanoid policy is a multi-week project even with good tooling.</td>
+          </tr>
+          <tr>
+            <td>XR teleoperation</td>
+            <td><code>xr_teleoperate</code> lists configs only for the upper-body R1 series (<code>R1_A5</code>, <code>R1_A7</code>). Vera is the full-size legged R1, which it does not support.</td>
+          </tr>
+          <tr>
+            <td>Voice and language</td>
+            <td>Downgraded from "not doing" to "not yet". Recon found <code>rt/api/voice/request</code>, <code>rt/api/gpt/request</code>, <code>rt/gpt_cmd</code>, <code>rt/gpt_state</code> and <code>rt/audio_msg</code> all live on her bus. The machinery is there and undocumented. Worth an hour once steps 2 to 5 are solid, and worth a vendor question either way.</td>
+          </tr>
+          <tr>
+            <td>Walking</td>
+            <td>Standing on a hoist is the honest limit of a bring-up. Free walking is a separate project with real risk.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin:0">Kepler is the counterweight here. A converged Go2 velocity policy trained on our own hardware and deployed to the robot is the learning result. See <a href="../kepler/">Kepler Sim-to-Real</a>. Vera's contribution is a clean scripted routine and her presence in the same simulation.</p>
+  </section>
+
+  
+  <section class="panel">
+    <h2>Open questions for the vendor, in priority order</h2>
+    <ul class="plain">
+      <li><b>Where are the R1 Isaac Sim assets?</b> The invoice states the robot "supports simulation environments such as Isaac SIM." There is no R1 USD in <code>unitree_model</code>, no R1 task in <code>unitree_rl_lab</code>, and no R1 in <code>unitree_sim_isaaclab</code>.</li>
+      <li><b>Is R1 support planned for <code>unitree_rl_lab</code>, and when?</b> The answer decides whether to migrate or commit to <code>unitree_rl_mjlab</code>.</li>
+      <li><b>What is the supported teleoperation path for the R1?</b> Given it is absent from <code>xr_teleoperate</code>.</li>
+      <li><b>The wrist-to-hand mounting transform.</b> Exact offset and rotation from <code>wrist_roll_link</code> to the hand flange. A number Unitree certainly has, and one we currently approximate.</li>
+      <li><b>What is the request schema for <code>rt/api/gpt/request</code> and <code>rt/api/voice/request</code>?</b> Both services are live on the robot and neither appears in any documentation. Ask for the API IDs and payload format.</li>
+      <li><b>Confirm <code>rt/arm_sdk</code> semantics.</b> We are relying on it commanding the arms while the balance controller keeps the legs. Get that confirmed rather than assumed, along with the weight or enable field it expects.</li>
+      <li><b>How is the compute backpack meant to be commissioned?</b> Ours arrived with power and ethernet unconnected and no printed instruction. Which rail feeds it, 24V or 36V, and does anything else need connecting.</li>
+      <li><b>When does <code>unitree_rl_lab</code> move to Isaac Lab 3.0 and Newton?</b> The <code>main</code> branch is frozen; 3.0 is still beta.</li>
+    </ul>
+  </section>
+
+  <!-- ============ RUNNING NOTES ============ -->
+  <section class="panel">
+    <h2>Standing rules</h2>
+    <ul class="plain">
+      <li><b>Hoist before command.</b> Every session, not just the first.</li>
+      <li><b>E-stop in reach</b> before anything is sent.</li>
+      <li><b>Damp is home.</b> Make it the easiest thing to trigger.</li>
+      <li><b>Simulate first.</b> Any pose gets checked in <code>vera_live.py</code> before it reaches hardware.</li>
+      <li><b>Never publish low-level commands</b> while the high-level controller is running. Two controllers fighting over the same joints is how a robot gets damaged.</li>
+      <li><b>Prompt check.</b> <code>(env_isaaclab)</code> at the front of the line, or the Isaac Lab commands will fail.</li>
+    </ul>
+  </section>
+
+  <footer><p class="credit" style="margin-top:14px;font-size:.82rem;color:var(--muted)">Written by Ben Wood, Digital Learning Coordinator, STEM Innovation Academy, Calgary. <a href="../" style="color:inherit">All robotics notes</a>.</p></footer>
+</div>
+
+</body></html>
