@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kepler Sim-to-Real</title>
+<meta name="description" content="How I deployed a locomotion policy trained in Isaac Lab onto a Unitree Go2, step by step.">
+<meta name="author" content="Ben Wood, STEM Innovation Academy">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#eceff2; --surface:#ffffff; --surface-2:#f5f8fa; --surface-3:#e6ebef;
+  --ink:#131a20; --ink-2:#2c3a45; --muted:#5d6f7c; --line:#d3dae0;
+  --accent:#a8630f; --accent-soft:#f6e6cd; --accent-line:#dfae6b;
+  --stop:#992a21; --stop-soft:#f8e0dd; --stop-line:#d99a92;
+  --go:#26624a; --go-soft:#dcece4; --go-line:#9dc4b1;
+  --shadow:0 1px 2px rgba(19,26,32,.06), 0 8px 24px -16px rgba(19,26,32,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0f1419; --surface:#161d24; --surface-2:#1c252d; --surface-3:#222c35;
+    --ink:#e7edf2; --ink-2:#c3cfd8; --muted:#90a2af; --line:#2b3741;
+    --accent:#e2a353; --accent-soft:#38290f; --accent-line:#6d5023;
+    --stop:#e5786a; --stop-soft:#391e1b; --stop-line:#7a3a33;
+    --go:#67b892; --go-soft:#16302a; --go-line:#2f5b4a;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0f1419; --surface:#161d24; --surface-2:#1c252d; --surface-3:#222c35;
+  --ink:#e7edf2; --ink-2:#c3cfd8; --muted:#90a2af; --line:#2b3741;
+  --accent:#e2a353; --accent-soft:#38290f; --accent-line:#6d5023;
+  --stop:#e5786a; --stop-soft:#391e1b; --stop-line:#7a3a33;
+  --go:#67b892; --go-soft:#16302a; --go-line:#2f5b4a;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.6; margin:0;
+  padding-inline:20px; padding-block:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:900px; margin:0 auto; padding-block:48px 90px}
+h1,h2,h3{font-family:Archivo,"IBM Plex Sans",sans-serif; text-wrap:balance; margin:0}
+h1{font-size:clamp(1.9rem,5vw,2.8rem); font-weight:700; letter-spacing:-.02em; line-height:1.08}
+h2{font-size:1.28rem; font-weight:700; letter-spacing:-.01em}
+h3{font-size:1rem; font-weight:600}
+p{margin:0; max-width:66ch}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:.7rem; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin:0}
+
+header{display:flex; flex-direction:column; gap:13px; padding-bottom:26px; border-bottom:2px solid var(--ink)}
+.sub{font-size:1.04rem; color:var(--ink-2); max-width:64ch}
+
+/* progress */
+.prog{
+  position:sticky; top:0; z-index:20; margin:0 -20px 0; padding:11px 20px;
+  background:var(--ground); border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+}
+.bar{flex:1 1 180px; height:6px; background:var(--surface-3); border-radius:99px; overflow:hidden; min-width:120px}
+.bar i{display:block; height:100%; width:0%; background:var(--accent); border-radius:99px; transition:width .25s ease}
+.count{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); font-variant-numeric:tabular-nums; white-space:nowrap}
+.saved{font-family:"IBM Plex Mono",monospace; font-size:.68rem; color:var(--muted); white-space:nowrap}
+.rst{
+  font-family:"IBM Plex Mono",monospace; font-size:.68rem; color:var(--muted);
+  background:none; border:1px solid var(--line); border-radius:99px; padding:3px 11px; cursor:pointer;
+}
+.rst:hover{color:var(--stop); border-color:var(--stop-line)}
+.rst:focus-visible, .tick:focus-visible, .field:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+/* stage */
+.stage{margin-top:42px}
+.shead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding-bottom:6px; border-bottom:1px solid var(--line)}
+.sid{font-family:Archivo,sans-serif; font-weight:700; font-size:1.28rem; color:var(--accent)}
+.stag{font-family:"IBM Plex Mono",monospace; font-size:.7rem; color:var(--muted); margin-left:auto}
+.sintro{margin-top:12px; color:var(--ink-2); font-size:.95rem}
+
+ol.steps{list-style:none; margin:16px 0 0; padding:0; counter-reset:st}
+li.step{
+  display:grid; grid-template-columns:26px 1fr; gap:0 14px;
+  padding:15px 16px; background:var(--surface); border:1px solid var(--line);
+  border-bottom:none; align-items:start;
+}
+li.step:first-child{border-radius:4px 4px 0 0}
+li.step:last-child{border-bottom:1px solid var(--line); border-radius:0 0 4px 4px}
+li.step.done{background:var(--surface-2)}
+li.step.done .stext{color:var(--muted); text-decoration:line-through; text-decoration-thickness:1px}
+
+.tick{
+  appearance:none; width:19px; height:19px; margin:3px 0 0; flex:none; cursor:pointer;
+  border:1.5px solid var(--muted); border-radius:3px; background:var(--surface); display:grid; place-content:center;
+}
+.tick:checked{background:var(--go); border-color:var(--go)}
+.tick:checked::after{content:""; width:5px; height:9px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(43deg) translate(-1px,-1px)}
+
+.sbody{display:flex; flex-direction:column; gap:9px; min-width:0}
+.stext{font-size:.96rem; color:var(--ink); cursor:pointer; display:block}
+.stext::before{counter-increment:st; content:counter(st) ". ";
+  font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--accent); font-weight:500}
+
+pre{margin:0; background:var(--surface-2); border:1px solid var(--line); border-radius:3px;
+  padding:11px 13px; overflow-x:auto; font-size:.8rem; line-height:1.6; color:var(--ink-2)}
+pre .c{color:var(--muted)}
+p code, li code{background:var(--surface-2); border:1px solid var(--line); border-radius:2px; padding:1px 5px; font-size:.86em}
+
+.expect{font-size:.85rem; color:var(--muted)}
+.expect b{font-family:"IBM Plex Mono",monospace; font-size:.66rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--go); margin-right:7px}
+.warnline{font-size:.85rem; color:var(--ink-2)}
+.warnline b{font-family:"IBM Plex Mono",monospace; font-size:.66rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--stop); margin-right:7px}
+
+.record{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:3px; padding:8px 11px}
+.record label{font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--accent); white-space:nowrap}
+.field{
+  flex:1 1 150px; min-width:0; font-family:"IBM Plex Mono",monospace; font-size:.83rem;
+  background:var(--surface); color:var(--ink); border:1px solid var(--line);
+  border-radius:2px; padding:5px 8px;
+}
+.field::placeholder{color:var(--muted); opacity:.7}
+
+.hazard{background:var(--stop-soft); border:1px solid var(--stop-line); border-left:3px solid var(--stop);
+  border-radius:4px; padding:15px 17px; display:flex; flex-direction:column; gap:8px; margin-top:16px}
+.hazard h3{color:var(--stop)}
+.hazard p{color:var(--ink-2); font-size:.91rem}
+.note{background:var(--go-soft); border:1px solid var(--go-line); border-left:3px solid var(--go);
+  border-radius:4px; padding:15px 17px; display:flex; flex-direction:column; gap:8px; margin-top:16px}
+.note h3{color:var(--go)}
+.note p{color:var(--ink-2); font-size:.91rem}
+
+.fork{background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:16px 18px;
+  display:flex; flex-direction:column; gap:10px; margin-top:16px; box-shadow:var(--shadow)}
+.fork h3{color:var(--accent)}
+.fork p{font-size:.91rem; color:var(--ink-2)}
+
+/* network map */
+.map{display:flex; flex-direction:column; margin-top:16px}
+.hostrow{display:grid; grid-template-columns:150px 1fr; gap:4px 16px; align-items:baseline;
+  padding:10px 14px; background:var(--surface); border:1px solid var(--line); border-bottom:none}
+.hostrow:first-child{border-radius:4px 4px 0 0}
+.hostrow:last-child{border-bottom:1px solid var(--line); border-radius:0 0 4px 4px}
+.hostrow b{font-family:"IBM Plex Mono",monospace; font-size:.8rem; font-weight:500; color:var(--ink)}
+.hostrow span{font-size:.88rem; color:var(--ink-2)}
+.hostrow.key-host{background:var(--accent-soft)}
+
+.ladder{display:flex; flex-direction:column; margin-top:4px}
+.rung{display:grid; grid-template-columns:104px 1fr; gap:4px 16px; align-items:baseline;
+  padding:10px 13px; background:var(--surface-2); border:1px solid var(--line); border-bottom:none}
+.rung:first-child{border-radius:3px 3px 0 0}
+.rung:last-child{border-bottom:1px solid var(--line); border-radius:0 0 3px 3px}
+.key{font-family:"IBM Plex Mono",monospace; font-size:.76rem; font-weight:500; color:var(--accent);
+  background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:2px; padding:3px 7px; text-align:center}
+.rung.abort .key{color:var(--stop); background:var(--stop-soft); border-color:var(--stop-line)}
+.rung span{font-size:.88rem; color:var(--ink-2)}
+
+footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:.82rem}
+footer p{max-width:70ch}
+
+@media (max-width:560px){
+  li.step{grid-template-columns:22px 1fr; gap:0 11px; padding:13px}
+  .rung, .hostrow{grid-template-columns:1fr}
+  .stag{margin-left:0; width:100%}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Go2 EDU U3 &middot; Bring-Up Checklist</p>
+  <h1>Kepler Sim-to-Real</h1>
+  <p class="sub">I trained a velocity-tracking locomotion policy for our Go2 quadruped in NVIDIA Isaac Lab, checked it in a second physics engine (MuJoCo, 7 of 7 flat-ground tests passed), and deployed it on the robot's onboard computer in place of Unitree's stock controller. This is the runbook I wrote for that deployment: every step from a cold robot to the first policy-driven walk.</p>
+  <p class="sub">Tick steps as you go. Recorded values save in your browser only, because half of them are needed three stages later.</p>
+</header>
+
+<div class="prog">
+  <span class="count" id="count">0 of 0 done</span>
+  <span class="bar"><i id="barfill"></i></span>
+  <span class="saved" id="saved"></span>
+  <button class="rst" id="reset" type="button">Reset</button>
+</div>
+
+<!-- ======================= A ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">A</span><h2>Get on the wire and get a shell</h2><span class="stag">10 min</span></div>
+  <p class="sintro">Nothing else can start until you have an SSH session. Kepler's addressing is not the same as Vera's, so do not assume the R1 numbers.</p>
+  <ol class="steps">
+
+    <li class="step" data-id="a1"><input type="checkbox" class="tick" id="a1">
+      <div class="sbody"><label class="stext" for="a1">Power Kepler on, lying flat, and let him finish booting.</label>
+      <p class="expect"><b>Expect</b>Roughly 30 to 60 seconds. Wait for the fans and LEDs to settle before plugging anything in.</p></div></li>
+
+    <li class="step" data-id="a2"><input type="checkbox" class="tick" id="a2">
+      <div class="sbody"><label class="stext" for="a2">Run ethernet from the workstation to the port on Kepler's body.</label>
+      <p class="expect"><b>Expect</b>The body port, not a backpack. Kepler's compute is internal, so the R1 routing you had to work out for Vera does not apply here.</p></div></li>
+
+    <li class="step" data-id="a3"><input type="checkbox" class="tick" id="a3">
+      <div class="sbody"><label class="stext" for="a3">Confirm the workstation still holds its static address on the robot subnet.</label>
+<pre>ipconfig | findstr 192.168.123</pre>
+      <p class="expect"><b>Expect</b><code>192.168.123.99</code>. If it is missing, the adapter reverted to DHCP and nothing below will find the robot.</p></div></li>
+
+    <li class="step" data-id="a4"><input type="checkbox" class="tick" id="a4">
+      <div class="sbody"><label class="stext" for="a4">Sweep the subnet to find him.</label>
+<pre>powershell -ExecutionPolicy Bypass -File C:\robotics\scan_kepler.ps1</pre>
+      <p class="expect"><b>Expect</b>Two minutes. Allow the inbound UDP prompt for Private networks or the DDS section finds nothing. It ends by printing the exact ssh line.</p></div></li>
+
+    <li class="step" data-id="a5"><input type="checkbox" class="tick" id="a5">
+      <div class="sbody"><label class="stext" for="a5">Record which host answered on port 22.</label>
+      <div class="record"><label for="f_ip">Onboard IP</label><input class="field" id="f_ip" placeholder="192.168.123.18"></div>
+      <div class="record"><label for="f_ssh">SSH banner</label><input class="field" id="f_ssh" placeholder="SSH-2.0-OpenSSH_..."></div>
+      <div class="record"><label for="f_dds">DDS domain heard</label><input class="field" id="f_dds" placeholder="0, 1, or nothing heard"></div></div></li>
+
+    <li class="step" data-id="a6"><input type="checkbox" class="tick" id="a6">
+      <div class="sbody"><label class="stext" for="a6">Open the SSH session.</label>
+<pre>ssh unitree@&lt;the IP above&gt;</pre>
+      <p class="expect"><b>Expect</b>A password prompt.</p>
+      <p class="warnline"><b>If refused</b>Do not brute force it. Ask the vendor for the account details.</p></div></li>
+  </ol>
+
+  <div class="fork">
+    <h3>What the scan found, and why it matters later</h3>
+    <p>Four hosts on the wire. The split between them is the single most important thing in this runbook, because it is what makes stage I work the way it does.</p>
+    <div class="map">
+      <div class="hostrow key-host"><b>192.168.123.18</b><span>The Jetson. SSH and a Tornado web service. This is where everything you build runs.</span></div>
+      <div class="hostrow key-host"><b>192.168.123.161</b><span>The control board. Publishes RTPS on domain 0, so it owns the motors. Port 80 only, <strong>no SSH</strong>.</span></div>
+      <div class="hostrow"><b>192.168.123.20</b><span>TTL 255, so embedded. Likely the lidar or a motor MCU. Not used here.</span></div>
+      <div class="hostrow"><b>192.168.123.99</b><span>Your workstation.</span></div>
+    </div>
+    <p>DDS discovery was heard on <strong>domain 0</strong>, which matches the <code>ChannelFactory::Instance()-&gt;Init(0, ...)</code> hardcoded in the controller's <code>main.cpp</code>. One less thing to configure.</p>
+  </div>
+</section>
+
+<!-- ======================= B ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">B</span><h2>Probe before you change anything</h2><span class="stag">10 min</span></div>
+  <p class="sintro">Seven answers. Every one of them is used later, and two of them change what you do next. All read-only.</p>
+  <ol class="steps">
+
+    <li class="step" data-id="b1"><input type="checkbox" class="tick" id="b1">
+      <div class="sbody"><label class="stext" for="b1">CPU architecture. This decides stage F entirely.</label>
+<pre>uname -m</pre>
+      <div class="record"><label for="f_arch">Architecture</label><input class="field" id="f_arch" placeholder="aarch64 or x86_64"></div>
+      <p class="expect"><b>Expect</b><code>aarch64</code>. If it says <code>x86_64</code> your life gets easier and you skip stage F entirely.</p></div></li>
+
+    <li class="step" data-id="b2"><input type="checkbox" class="tick" id="b2">
+      <div class="sbody"><label class="stext" for="b2">OS version. Sets which apt packages exist.</label>
+<pre>cat /etc/os-release | head -3
+uname -r</pre>
+      <div class="record"><label for="f_os">OS and kernel</label><input class="field" id="f_os" placeholder="Ubuntu 20.04 / 5.10.x-tegra"></div>
+      <p class="expect"><b>Expect</b>Ubuntu 20.04. The SSH banner already said <code>OpenSSH_8.2p1 Ubuntu-4ubuntu0.5</code>, which is 20.04's build, so this is a confirmation rather than a discovery.</p></div></li>
+
+    <li class="step" data-id="b3"><input type="checkbox" class="tick" id="b3">
+      <div class="sbody"><label class="stext" for="b3">Network interface name. Three different tools need this by name.</label>
+<pre>ip -brief address</pre>
+      <div class="record"><label for="f_iface">Interface on 192.168.123.x</label><input class="field" id="f_iface" placeholder="eth0, eth10, enP8p1s0 ..."></div>
+      <p class="expect"><b>Expect</b>The one carrying a <code>192.168.123.x</code> address. Vera's was <code>eth10</code> with <code>eth0</code> down, so do not assume <code>eth0</code>.</p></div></li>
+
+    <li class="step" data-id="b4"><input type="checkbox" class="tick" id="b4">
+      <div class="sbody"><label class="stext" for="b4">Free disk. The toolchain and build need room.</label>
+<pre>df -h /</pre>
+      <div class="record"><label for="f_disk">Free on /</label><input class="field" id="f_disk" placeholder="e.g. 42G"></div>
+      <p class="warnline"><b>Under 3 GB</b>Stop and clear space first. A build that dies on a full disk leaves a confusing mess.</p></div></li>
+
+    <li class="step" data-id="b5"><input type="checkbox" class="tick" id="b5">
+      <div class="sbody"><label class="stext" for="b5">RAM and cores. These set the make parallelism in stage H.</label>
+<pre>free -h; nproc</pre>
+      <div class="record"><label for="f_cpu">RAM / cores</label><input class="field" id="f_cpu" placeholder="16G / 8"></div>
+      <p class="expect"><b>Rule</b>Use <code>-j4</code> if RAM is 8 GB or less. C++ with heavy templates will OOM a small board at <code>-j$(nproc)</code>.</p></div></li>
+
+    <li class="step" data-id="b6"><input type="checkbox" class="tick" id="b6">
+      <div class="sbody"><label class="stext" for="b6">See what runs on the Jetson itself. Expect this to come back nearly empty.</label>
+<pre>systemctl list-units --type=service | grep -iE "sport|motion|unitree|robot"</pre>
+      <div class="record"><label for="f_svc">Local services found</label><input class="field" id="f_svc" placeholder="likely none, or only a web or video service"></div>
+      <p class="warnline"><b>Read before stage I</b>The service that owns the motors does not run on this machine. It runs on the control board at <code>192.168.123.161</code>, which offers no SSH. So <code>systemctl</code> here cannot reach it, and finding nothing is the expected result rather than a problem. Stage I switches it off over DDS instead.</p></div></li>
+
+    <li class="step" data-id="b7"><input type="checkbox" class="tick" id="b7">
+      <div class="sbody"><label class="stext" for="b7">Can Kepler reach the internet? This is the fork most people trip on.</label>
+<pre>ping -c1 -W2 8.8.8.8
+curl -sI https://github.com | head -1</pre>
+      <div class="record"><label for="f_net">Internet</label><input class="field" id="f_net" placeholder="yes / no"></div></div></li>
+  </ol>
+
+  <div class="fork">
+    <h3>Fork: the robot subnet is isolated</h3>
+    <p>Stages C through F all pull from the internet: apt packages, two git repos, and an onnxruntime tarball. The <code>192.168.123.x</code> wire is the robot's own control network and normally has no route out.</p>
+    <p><strong>Easiest path.</strong> Put Kepler on the building WiFi for stages C through F, then go back to the isolated wire for stages I and J. From the SSH session:</p>
+<pre>nmcli device wifi list
+sudo nmcli device wifi connect "&lt;SSID&gt;" password "&lt;pw&gt;"
+ping -c1 8.8.8.8   <span class="c"># confirm before continuing</span></pre>
+    <p><strong>If WiFi is not an option</strong>, download everything on the workstation and push it over with <code>scp</code>. That works for the two repos and the onnxruntime tarball. It does not work well for apt, so check first whether the packages in stage C are already installed. Many Unitree images ship with most of them.</p>
+  </div>
+
+  <div class="hazard">
+    <h3>The lowcmd guard does not stop anything</h3>
+    <p><code>main.cpp</code> checks whether another process holds the lowcmd channel and logs a critical error telling you to close it first. The <code>exit(0)</code> on that branch is commented out, so it prints the warning and continues anyway.</p>
+    <p>If <code>sport_mode</code> is still running when you start your controller, two programs will fight over the same twelve motors while the log narrates it. Stage I is a real step, not a formality.</p>
+  </div>
+</section>
+
+<!-- ======================= C ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">C</span><h2>Build dependencies</h2><span class="stag">20 min, mostly download</span></div>
+  <ol class="steps">
+
+    <li class="step" data-id="c1"><input type="checkbox" class="tick" id="c1">
+      <div class="sbody"><label class="stext" for="c1">Refresh the package index.</label>
+<pre>sudo apt update</pre></div></li>
+
+    <li class="step" data-id="c2"><input type="checkbox" class="tick" id="c2">
+      <div class="sbody"><label class="stext" for="c2">Install the toolchain and libraries.</label>
+<pre>sudo apt install -y build-essential cmake git \
+  libyaml-cpp-dev libboost-all-dev libeigen3-dev libspdlog-dev libfmt-dev</pre></div></li>
+
+    <li class="step" data-id="c3"><input type="checkbox" class="tick" id="c3">
+      <div class="sbody"><label class="stext" for="c3">Confirm the compiler and CMake are usable.</label>
+<pre>cmake --version; g++ --version | head -1</pre>
+      <p class="expect"><b>Expect</b>CMake 3.12 or newer. That is what the controller's CMakeLists requires.</p></div></li>
+
+    <li class="step" data-id="c4"><input type="checkbox" class="tick" id="c4">
+      <div class="sbody"><label class="stext" for="c4">Confirm the static archives exist, not just the shared objects.</label>
+<pre>find /usr/lib /usr/local/lib -name "libboost_program_options.a" 2&gt;/dev/null
+find /usr/lib /usr/local/lib -name "libyaml-cpp.a" 2&gt;/dev/null</pre>
+      <p class="expect"><b>Expect</b>One hit each. The CMakeLists links both by their <code>.a</code> filename, so a missing archive fails at link time with a message that does not obviously say why.</p></div></li>
+  </ol>
+</section>
+
+<!-- ======================= D ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">D</span><h2>Install unitree_sdk2</h2><span class="stag">20 min</span></div>
+  <p class="sintro">This puts CycloneDDS and iceoryx into <code>/usr/local</code>. Both the controller and the service tool in stage I link against it.</p>
+  <ol class="steps">
+
+    <li class="step" data-id="d1"><input type="checkbox" class="tick" id="d1">
+      <div class="sbody"><label class="stext" for="d1">Make a working directory so everything stays in one place.</label>
+<pre>mkdir -p ~/robotics &amp;&amp; cd ~/robotics</pre></div></li>
+
+    <li class="step" data-id="d2"><input type="checkbox" class="tick" id="d2">
+      <div class="sbody"><label class="stext" for="d2">Clone the SDK.</label>
+<pre>git clone https://github.com/unitreerobotics/unitree_sdk2.git</pre></div></li>
+
+    <li class="step" data-id="d3"><input type="checkbox" class="tick" id="d3">
+      <div class="sbody"><label class="stext" for="d3">Configure it, with examples off.</label>
+<pre>cd ~/robotics/unitree_sdk2 &amp;&amp; mkdir -p build &amp;&amp; cd build
+cmake .. -DBUILD_EXAMPLES=OFF</pre></div></li>
+
+    <li class="step" data-id="d4"><input type="checkbox" class="tick" id="d4">
+      <div class="sbody"><label class="stext" for="d4">Install to /usr/local.</label>
+<pre>sudo make install</pre>
+      <p class="expect"><b>Expect</b>A long install list. This step also drops in the bundled CycloneDDS and iceoryx.</p></div></li>
+
+    <li class="step" data-id="d5"><input type="checkbox" class="tick" id="d5">
+      <div class="sbody"><label class="stext" for="d5">Confirm the DDS headers landed where the controller expects them.</label>
+<pre>ls /usr/local/include/ddscxx | head</pre>
+      <p class="expect"><b>Expect</b>Headers present. The controller hardcodes this exact path.</p></div></li>
+
+    <li class="step" data-id="d6"><input type="checkbox" class="tick" id="d6">
+      <div class="sbody"><label class="stext" for="d6">Record the iceoryx version. The controller pins it by name.</label>
+<pre>ls -d /usr/local/include/iceoryx/*</pre>
+      <div class="record"><label for="f_ice">iceoryx version</label><input class="field" id="f_ice" placeholder="v2.0.2 or other"></div>
+      <p class="warnline"><b>If not v2.0.2</b>The CMakeLists includes <code>/usr/local/include/iceoryx/v2.0.2</code> literally. A different version means editing that one line in stage F. Note it now rather than debugging it at link time.</p></div></li>
+
+    <li class="step" data-id="d7"><input type="checkbox" class="tick" id="d7">
+      <div class="sbody"><label class="stext" for="d7">Confirm the libraries are installed.</label>
+<pre>ls /usr/local/lib | grep -E "ddsc|unitree"</pre>
+      <p class="expect"><b>Expect</b><code>libddsc</code>, <code>libddscxx</code> and <code>libunitree_sdk2</code>.</p></div></li>
+  </ol>
+</section>
+
+<!-- ======================= E ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">E</span><h2>Get the controller source onto the robot</h2><span class="stag">5 min</span></div>
+  <ol class="steps">
+    <li class="step" data-id="e1"><input type="checkbox" class="tick" id="e1">
+      <div class="sbody"><label class="stext" for="e1">Clone unitree_rl_lab beside the SDK.</label>
+<pre>cd ~/robotics
+git clone https://github.com/unitreerobotics/unitree_rl_lab.git</pre></div></li>
+
+    <li class="step" data-id="e2"><input type="checkbox" class="tick" id="e2">
+      <div class="sbody"><label class="stext" for="e2">Confirm the Go2 controller and its bundled onnxruntime are present.</label>
+<pre>ls ~/robotics/unitree_rl_lab/deploy/robots/go2
+ls ~/robotics/unitree_rl_lab/deploy/thirdparty</pre>
+      <p class="expect"><b>Expect</b><code>CMakeLists.txt</code>, <code>main.cpp</code>, <code>config</code>, <code>src</code>, and a <code>onnxruntime-linux-x64-1.22.0</code> folder. That x64 is the problem stage F solves.</p></div></li>
+  </ol>
+</section>
+
+<!-- ======================= F ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">F</span><h2>Port onnxruntime to aarch64</h2><span class="stag">15 min if clean, this is the risk</span></div>
+  <p class="sintro">Skip this whole stage if step B1 said <code>x86_64</code>. Otherwise it is the only genuine porting work in the build.</p>
+  <ol class="steps">
+
+    <li class="step" data-id="f1"><input type="checkbox" class="tick" id="f1">
+      <div class="sbody"><label class="stext" for="f1">Download the aarch64 build of the same version.</label>
+<pre>cd ~/robotics/unitree_rl_lab/deploy/thirdparty
+wget https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-aarch64-1.22.0.tgz</pre>
+      <p class="expect"><b>Keep 1.22.0</b>Matching what the repo was written against costs nothing and removes a variable.</p></div></li>
+
+    <li class="step" data-id="f2"><input type="checkbox" class="tick" id="f2">
+      <div class="sbody"><label class="stext" for="f2">Extract it beside the x64 copy.</label>
+<pre>tar -xzf onnxruntime-linux-aarch64-1.22.0.tgz
+ls -d onnxruntime-*</pre>
+      <p class="expect"><b>Expect</b>Two folders. Leave the x64 one alone, it costs nothing and keeps the repo diffable.</p></div></li>
+
+    <li class="step" data-id="f3"><input type="checkbox" class="tick" id="f3">
+      <div class="sbody"><label class="stext" for="f3">Confirm the extracted folder name matches exactly what you will reference.</label>
+<pre>ls onnxruntime-linux-aarch64-1.22.0/lib</pre>
+      <p class="expect"><b>Expect</b><code>libonnxruntime.so</code> and its versioned siblings. A name mismatch here is the most likely cause of a stage H link failure.</p></div></li>
+
+    <li class="step" data-id="f4"><input type="checkbox" class="tick" id="f4">
+      <div class="sbody"><label class="stext" for="f4">Point the CMakeLists at it. There are two references, one include and one link.</label>
+<pre>cd ~/robotics/unitree_rl_lab/deploy/robots/go2
+cp CMakeLists.txt CMakeLists.txt.bak
+sed -i 's/onnxruntime-linux-x64-1.22.0/onnxruntime-linux-aarch64-1.22.0/g' CMakeLists.txt</pre></div></li>
+
+    <li class="step" data-id="f5"><input type="checkbox" class="tick" id="f5">
+      <div class="sbody"><label class="stext" for="f5">Verify both references changed and neither was missed.</label>
+<pre>grep -n onnxruntime CMakeLists.txt</pre>
+      <p class="expect"><b>Expect</b>Exactly two lines, both saying <code>aarch64</code>. One of each means the sed only caught half.</p></div></li>
+
+    <li class="step" data-id="f6"><input type="checkbox" class="tick" id="f6">
+      <div class="sbody"><label class="stext" for="f6">Only if step D6 showed an iceoryx version other than v2.0.2: fix that include too.</label>
+<pre>sed -i 's|iceoryx/v2.0.2|iceoryx/&lt;your version&gt;|' CMakeLists.txt
+grep -n iceoryx CMakeLists.txt</pre>
+      <p class="expect"><b>If D6 said v2.0.2</b>Tick this and move on, nothing to do.</p></div></li>
+  </ol>
+
+  <div class="note">
+    <h3>Worth knowing: CPU only is genuinely fine</h3>
+    <p>The policy is a three layer network, roughly 188,000 parameters, evaluated at 50 Hz. That is nothing on a CPU. The stock aarch64 build is entirely sufficient, so there is no CUDA, no TensorRT and no JetPack version matching anywhere in this build. A whole category of problem does not apply.</p>
+  </div>
+</section>
+
+<!-- ======================= G ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">G</span><h2>Copy the policy, not the training run</h2><span class="stag">10 min</span></div>
+  <p class="sintro">The controller opens exactly two files. Confirmed in <code>State_RLBase.cpp</code>. The 231 checkpoints and the 52 MB TensorBoard log stay on the workstation.</p>
+  <ol class="steps">
+
+    <li class="step" data-id="g1"><input type="checkbox" class="tick" id="g1">
+      <div class="sbody"><label class="stext" for="g1">On the robot, create the directory tree the loader expects.</label>
+<pre>mkdir -p ~/robotics/unitree_rl_lab/logs/rsl_rl/unitree_go2_velocity/2026-09-02_16-04-31/exported
+mkdir -p ~/robotics/unitree_rl_lab/logs/rsl_rl/unitree_go2_velocity/2026-09-02_16-04-31/params</pre>
+      <p class="expect"><b>The folder name matters</b><code>param.h</code> sorts the subdirectories of <code>unitree_go2_velocity</code> and takes the last one containing an <code>exported</code> folder. The date is how it picks.</p></div></li>
+
+    <li class="step" data-id="g2"><input type="checkbox" class="tick" id="g2">
+      <div class="sbody"><label class="stext" for="g2">From a Windows terminal on the workstation, push both files.</label>
+<pre>set R=~/robotics/unitree_rl_lab/logs/rsl_rl/unitree_go2_velocity/2026-09-02_16-04-31
+set L=C:\robotics\unitree_rl_lab\logs\rsl_rl\unitree_go2_velocity\2026-09-02_16-04-31
+
+scp "%L%\exported\policy.onnx" unitree@192.168.123.18:%R%/exported/
+scp "%L%\params\deploy.yaml"   unitree@192.168.123.18:%R%/params/</pre></div></li>
+
+    <li class="step" data-id="g3"><input type="checkbox" class="tick" id="g3">
+      <div class="sbody"><label class="stext" for="g3">On the robot, confirm both arrived at the right sizes.</label>
+<pre>find ~/robotics/unitree_rl_lab/logs -type f -exec ls -l {} \;</pre>
+      <p class="expect"><b>Expect</b><code>policy.onnx</code> at 758,549 bytes and <code>deploy.yaml</code> at 1,838 bytes. Exact numbers, because a truncated transfer is otherwise invisible until the controller fails to load.</p></div></li>
+
+    <li class="step" data-id="g4"><input type="checkbox" class="tick" id="g4">
+      <div class="sbody"><label class="stext" for="g4">Confirm the policy file is byte identical, not merely the right size.</label>
+<pre><span class="c"># on the robot</span>
+md5sum ~/robotics/unitree_rl_lab/logs/rsl_rl/unitree_go2_velocity/2026-09-02_16-04-31/exported/policy.onnx
+<span class="c"># on the workstation</span>
+certutil -hashfile "C:\robotics\unitree_rl_lab\logs\rsl_rl\unitree_go2_velocity\2026-09-02_16-04-31\exported\policy.onnx" MD5</pre>
+      <div class="record"><label for="f_md5">MD5 match</label><input class="field" id="f_md5" placeholder="yes / no"></div></div></li>
+  </ol>
+</section>
+
+<!-- ======================= H ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">H</span><h2>Build the controller and the service tool</h2><span class="stag">15 min</span></div>
+  <ol class="steps">
+
+    <li class="step" data-id="h1"><input type="checkbox" class="tick" id="h1">
+      <div class="sbody"><label class="stext" for="h1">Configure the controller.</label>
+<pre>cd ~/robotics/unitree_rl_lab/deploy/robots/go2
+mkdir -p build &amp;&amp; cd build
+cmake ..</pre>
+      <p class="expect"><b>Expect</b>Boost and yaml-cpp both found. If either is not, go back to step C4.</p></div></li>
+
+    <li class="step" data-id="h2"><input type="checkbox" class="tick" id="h2">
+      <div class="sbody"><label class="stext" for="h2">Compile, with parallelism matched to the RAM you recorded in B5.</label>
+<pre>make -j4        <span class="c"># -j$(nproc) only if you have plenty of RAM</span></pre>
+      <p class="warnline"><b>If it dies</b>A killed compiler with no error usually means out of memory. Drop to <code>make -j2</code> or plain <code>make</code>.</p></div></li>
+
+    <li class="step" data-id="h3"><input type="checkbox" class="tick" id="h3">
+      <div class="sbody"><label class="stext" for="h3">Confirm the binary exists and leave it exactly where it is.</label>
+<pre>ls -l ~/robotics/unitree_rl_lab/deploy/robots/go2/build/go2_ctrl</pre>
+      <p class="warnline"><b>Do not move it</b>The binary finds its own <code>config.yaml</code> by walking up from its own path, and only does that correctly when its parent folder is named <code>build</code> or <code>bin</code>.</p></div></li>
+
+    <li class="step" data-id="h4"><input type="checkbox" class="tick" id="h4">
+      <div class="sbody"><label class="stext" for="h4">Prove it runs. This is safe, it exits before touching anything.</label>
+<pre>./go2_ctrl --help
+./go2_ctrl --version</pre>
+      <p class="expect"><b>Expect</b>The option list including <code>--network</code>, then a version string. The robot is still completely untouched at this point.</p></div></li>
+
+    <li class="step" data-id="h5"><input type="checkbox" class="tick" id="h5">
+      <div class="sbody"><label class="stext" for="h5">Copy the service tool over from the workstation.</label>
+<pre>scp C:\robotics\go2_service\go2_service.cpp  unitree@192.168.123.18:~/
+scp C:\robotics\go2_service\CMakeLists.txt   unitree@192.168.123.18:~/</pre>
+      <p class="expect"><b>What this is</b>A small tool that lists and switches Kepler's onboard services over DDS. It is how stage I releases the motors, since the control board has no shell.</p></div></li>
+
+    <li class="step" data-id="h6"><input type="checkbox" class="tick" id="h6">
+      <div class="sbody"><label class="stext" for="h6">Build it.</label>
+<pre>mkdir -p ~/robotics/go2_service &amp;&amp; cd ~/robotics/go2_service
+mv ~/go2_service.cpp ~/CMakeLists.txt .
+mkdir -p build &amp;&amp; cd build
+cmake .. &amp;&amp; make
+./go2_service</pre>
+      <p class="expect"><b>Expect</b>The usage text. It needs <code>find_package(unitree_sdk2)</code> to succeed, which stage D already arranged.</p></div></li>
+  </ol>
+</section>
+
+<!-- ======================= I ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">I</span><h2>Release the motors</h2><span class="stag">10 min</span></div>
+  <p class="sintro">Everything up to here was reversible. This is the stage that takes Kepler out of his normal operating mode, and the mechanism is not the obvious one.</p>
+  <ol class="steps">
+
+    <li class="step" data-id="i1"><input type="checkbox" class="tick" id="i1">
+      <div class="sbody"><label class="stext" for="i1">Clear roughly three metres square of flat, hard, indoor floor.</label>
+      <p class="warnline"><b>Flat only</b>The terrain curriculum never promoted past its first level across 23,043 training iterations. In simulation the only falls were forward walks into a 4 cm step. He has no learned competence for thresholds, ramps, cables or rugs.</p></div></li>
+
+    <li class="step" data-id="i2"><input type="checkbox" class="tick" id="i2">
+      <div class="sbody"><label class="stext" for="i2">Remote in hand, paired, and charged. Confirm you can reach the physical e-stop.</label></div></li>
+
+    <li class="step" data-id="i3"><input type="checkbox" class="tick" id="i3">
+      <div class="sbody"><label class="stext" for="i3">Put him back on the isolated wire if you moved him to WiFi in stage B.</label>
+<pre>ip -brief address   <span class="c"># confirm the 192.168.123.x interface is up</span></pre></div></li>
+
+    <li class="step" data-id="i4"><input type="checkbox" class="tick" id="i4">
+      <div class="sbody"><label class="stext" for="i4">List what the control board is actually running, and copy the service name exactly.</label>
+<pre>cd ~/robotics/go2_service/build
+./go2_service &lt;interface from B3&gt; list</pre>
+      <div class="record"><label for="f_svc2">Motor service name</label><input class="field" id="f_svc2" placeholder="sport_mode, or whatever list showed"></div>
+      <p class="warnline"><b>Check the protect column</b>Anything marked <code>YES</code> will refuse to switch. If the motor service is protected, stop here. That is a vendor question, not something to work around.</p></div></li>
+
+    <li class="step" data-id="i5"><input type="checkbox" class="tick" id="i5">
+      <div class="sbody"><label class="stext" for="i5">Switch it off.</label>
+<pre>./go2_service &lt;interface from B3&gt; off sport_mode</pre>
+      <p class="expect"><b>Expect</b><code>ret=0</code> and <code>Switched OFF.</code> Kepler may visibly relax as the control board lets go.</p></div></li>
+
+    <li class="step" data-id="i6"><input type="checkbox" class="tick" id="i6">
+      <div class="sbody"><label class="stext" for="i6">Verify by listing again. Do not take the return code on faith.</label>
+<pre>./go2_service &lt;interface from B3&gt; list</pre>
+      <p class="expect"><b>Expect</b>The service now showing <code>off</code>. If it still says <code>on</code>, stop here. The controller will not stop for you.</p></div></li>
+  </ol>
+
+  <div class="note">
+    <h3>Why this replaced the systemctl step</h3>
+    <p>The obvious move is <code>sudo systemctl stop sport_mode</code> on the machine you are logged into. It cannot work. That service runs on the control board at <code>192.168.123.161</code>, which answers on port 80 and nothing else, so there is no shell to run it in.</p>
+    <p>The SDK's <code>RobotStateClient</code> exists for exactly this, with <code>ServiceList</code> and <code>ServiceSwitch</code> over DDS. The stock SDK example switches <code>sport_mode</code> off, waits five seconds, then switches it back on before exiting, which is the opposite of what you want here. <code>go2_service</code> does one thing per invocation and leaves it that way.</p>
+  </div>
+</section>
+
+<!-- ======================= J ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">J</span><h2>First run</h2><span class="stag">take the time it takes</span></div>
+  <ol class="steps">
+
+    <li class="step" data-id="j1"><input type="checkbox" class="tick" id="j1">
+      <div class="sbody"><label class="stext" for="j1">Launch, using the interface name from step B3.</label>
+<pre>cd ~/robotics/unitree_rl_lab/deploy/robots/go2/build
+./go2_ctrl --network &lt;interface from B3&gt;</pre></div></li>
+
+    <li class="step" data-id="j2"><input type="checkbox" class="tick" id="j2">
+      <div class="sbody"><label class="stext" for="j2">Watch for the connection handshake.</label>
+      <p class="expect"><b>Expect</b><code>Waiting for connection to robot...</code> then <code>Connected to robot.</code> If it hangs on the first line, the interface name is wrong. The DDS domain is already confirmed as 0.</p>
+      <p class="warnline"><b>If you see</b><code>The other process is using the lowcmd channel</code>, kill it immediately. Stage I did not take. The program will carry on regardless if you let it.</p></div></li>
+
+    <li class="step" data-id="j3"><input type="checkbox" class="tick" id="j3">
+      <div class="sbody"><label class="stext" for="j3">Confirm it loaded the policy you think it loaded.</label>
+      <p class="expect"><b>Expect</b>A log line reading <code>Policy directory: ...</code> ending in <code>2026-09-02_16-04-31</code>. If it names a different folder, stop and check stage G.</p></div></li>
+
+    <li class="step" data-id="j4"><input type="checkbox" class="tick" id="j4">
+      <div class="sbody"><label class="stext" for="j4">Stand him up. Hand stays on the remote.</label>
+      <div class="ladder">
+        <div class="rung"><span class="key">LT + A</span><span>Passive to FixStand. Two full seconds of pose interpolation. It has not hung.</span></div>
+      </div></div></li>
+
+    <li class="step" data-id="j5"><input type="checkbox" class="tick" id="j5">
+      <div class="sbody"><label class="stext" for="j5">Watch him hold the stance for ten seconds before doing anything else.</label>
+      <p class="expect"><b>Looking for</b>A still, level stance. Buzzing, oscillation or one leg fighting the others means stop and abort now rather than after the policy engages.</p></div></li>
+
+    <li class="step" data-id="j6"><input type="checkbox" class="tick" id="j6">
+      <div class="sbody"><label class="stext" for="j6">Hand control to the policy, then give it five seconds with no command at all.</label>
+      <div class="ladder">
+        <div class="rung"><span class="key">start</span><span>FixStand to Velocity. The policy is now driving.</span></div>
+        <div class="rung abort"><span class="key">LT + B</span><span>Back to Passive. This is your abort and it works from either state.</span></div>
+      </div>
+      <p class="expect"><b>Looking for</b>A stationary, settled stand. In simulation the zero command case held perfectly still at 0.320 m with no drift.</p></div></li>
+
+    <li class="step" data-id="j7"><input type="checkbox" class="tick" id="j7">
+      <div class="sbody"><label class="stext" for="j7">Smallest possible forward command. Nothing else yet.</label>
+      <p class="expect"><b>He will undershoot</b>Tracking runs 60 to 78% of commanded across every direction tested. A 1.0 m/s command produced 0.78 m/s in simulation. Direction is correct, magnitude is low. Do not compensate by commanding harder.</p>
+      <div class="record"><label for="f_walk">First walk</label><input class="field" id="f_walk" placeholder="what actually happened"></div></div></li>
+
+    <li class="step" data-id="j8"><input type="checkbox" class="tick" id="j8">
+      <div class="sbody"><label class="stext" for="j8">Abort deliberately, so you have felt it work before you need it.</label>
+      <p class="expect"><b>Expect</b>A controlled slump. Passive is damping only, kd of 3 with no position gain, so it is neither a rigid drop nor a collapse.</p></div></li>
+  </ol>
+
+  <div class="note">
+    <h3>You have one automatic safety net</h3>
+    <p><code>State_RLBase</code> registers a <code>bad_orientation</code> check at 1.0 radian, roughly 57 degrees, which transitions straight to Passive. If Kepler goes over, the controller drops him to damping on its own without waiting for your thumb. This is real and it is already compiled into what you just built.</p>
+  </div>
+</section>
+
+<!-- ======================= K ======================= -->
+<section class="stage">
+  <div class="shead"><span class="sid">K</span><h2>Put things back</h2><span class="stag">5 min</span></div>
+  <p class="sintro">Do not skip this. Kepler stays in a non-standard state until you undo stage I, and the next person to pick up the remote will not know that.</p>
+  <ol class="steps">
+    <li class="step" data-id="k1"><input type="checkbox" class="tick" id="k1">
+      <div class="sbody"><label class="stext" for="k1">Stop the controller with Ctrl-C, then hand the motors back.</label>
+<pre>cd ~/robotics/go2_service/build
+./go2_service &lt;interface from B3&gt; on sport_mode
+./go2_service &lt;interface from B3&gt; list</pre>
+      <p class="expect"><b>Expect</b>The service showing <code>on</code> again. Kepler goes back to behaving like a normal Go2.</p></div></li>
+
+    <li class="step" data-id="k2"><input type="checkbox" class="tick" id="k2">
+      <div class="sbody"><label class="stext" for="k2">Write down what happened while it is fresh.</label>
+      <div class="record"><label for="f_notes">Session notes</label><input class="field" id="f_notes" placeholder="what worked, what surprised you, what to ask Unitree"></div></div></li>
+  </ol>
+</section>
+
+<footer>
+  <p>Every command and every claim here was read out of the repository on the workstation rather than recalled: <span class="mono">CMakeLists.txt</span>, <span class="mono">main.cpp</span>, <span class="mono">State_RLBase.cpp</span>, <span class="mono">param.h</span>, <span class="mono">robot_state_client.hpp</span>, <span class="mono">config.yaml</span> and <span class="mono">deploy.yaml</span>. The network map comes from the subnet scan. The policy figures come from the run's own TensorBoard log and from the sim2sim battery, which was executed against this exact policy file and the Go2 MJCF and passed 7 of 7 on flat ground.</p>
+  <p style="margin-top:10px">Ticks and recorded values save in this browser only. Nothing is sent anywhere.</p>
+<p class="credit" style="margin-top:14px;font-size:.82rem;color:var(--muted)">Written by Ben Wood, Digital Learning Coordinator, STEM Innovation Academy, Calgary. <a href="../" style="color:inherit">All robotics notes</a>.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var DOC = "progress/kepler";
+  var ticks  = Array.prototype.slice.call(document.querySelectorAll(".tick"));
+  var fields = Array.prototype.slice.call(document.querySelectorAll(".field"));
+  var countEl = document.getElementById("count");
+  var fillEl  = document.getElementById("barfill");
+  var savedEl = document.getElementById("saved");
+  var resetEl = document.getElementById("reset");
+
+  var db = null, ref = null, applying = false, timer = null;
+
+  function paint(){
+    var done = 0;
+    ticks.forEach(function(t){
+      var li = t.closest(".step");
+      if (t.checked) { done++; li.classList.add("done"); }
+      else li.classList.remove("done");
+    });
+    countEl.textContent = done + " of " + ticks.length + " done";
+    fillEl.style.width = (ticks.length ? (done / ticks.length * 100) : 0) + "%";
+  }
+
+  function collect(){
+    var checked = {}, vals = {};
+    ticks.forEach(function(t){ if (t.checked) checked[t.id] = true; });
+    fields.forEach(function(f){ if (f.value.trim()) vals[f.id] = f.value; });
+    return { checked: checked, fields: vals, updatedAt: Date.now() };
+  }
+
+  function apply(state){
+    if (!state) return;
+    applying = true;
+    var c = state.checked || {}, v = state.fields || {};
+    ticks.forEach(function(t){ t.checked = !!c[t.id]; });
+    fields.forEach(function(f){ if (typeof v[f.id] === "string") f.value = v[f.id]; });
+    applying = false;
+    paint();
+  }
+
+  function local(state){
+    try {
+      if (state) localStorage.setItem("kepler-runbook", JSON.stringify(state));
+      else return JSON.parse(localStorage.getItem("kepler-runbook") || "null");
+    } catch (e) { return null; }
+  }
+
+  function save(){
+    if (applying) return;
+    var state = collect();
+    local(state);
+    paint();
+    if (!ref) { savedEl.textContent = "saved on this device"; return; }
+    savedEl.textContent = "saving";
+    ref.set(state).then(function(){
+      savedEl.textContent = "saved";
+    }).catch(function(){
+      savedEl.textContent = "saved on this device";
+    });
+  }
+
+  function queueSave(){
+    if (applying) return;
+    paint();
+    clearTimeout(timer);
+    timer = setTimeout(save, 700);
+  }
+
+  ticks.forEach(function(t){ t.addEventListener("change", queueSave); });
+  fields.forEach(function(f){ f.addEventListener("input", queueSave); });
+
+  resetEl.addEventListener("click", function(){
+    if (!confirm("Clear every tick and every recorded value?")) return;
+    applying = true;
+    ticks.forEach(function(t){ t.checked = false; });
+    fields.forEach(function(f){ f.value = ""; });
+    applying = false;
+    save();
+  });
+
+  apply(local());
+  paint();
+
+})();
+</script>
+
+</body></html>
