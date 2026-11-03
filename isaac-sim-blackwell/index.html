@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Isaac Sim 5.1 crashes on RTX 50-series GPUs</title>
+<meta name="description" content="Isaac Sim 5.1.0 crashes on open on Blackwell cards with a 595.xx NVIDIA driver. The fix is Studio Driver 591.74.">
+<meta name="author" content="Ben Wood, STEM Innovation Academy">
+<style>body{margin:0}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:   #F5F7FA;
+    --surface:  #FFFFFF;
+    --sunk:     #EDF0F5;
+    --ink:      #141A24;
+    --muted:    #5A6577;
+    --faint:    #8A94A6;
+    --line:     #DCE1E9;
+    --line-hi:  #C3CBD8;
+    --accent:   #2A4A8F;
+    --accent-w: #E8EDF8;
+    --danger:   #9E2B25;
+    --danger-w: #FBEDEC;
+    --ok:       #1D6349;
+    --ok-w:     #E7F2ED;
+    --hold:     #7A5A16;
+    --hold-w:   #FAF1DC;
+    --shadow:   0 1px 2px rgba(20,26,36,.05), 0 4px 14px rgba(20,26,36,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0E131B;
+      --surface:  #161D28;
+      --sunk:     #1D2530;
+      --ink:      #E6EAF1;
+      --muted:    #9BA6B8;
+      --faint:    #6E7A8D;
+      --line:     #2A3340;
+      --line-hi:  #3B4757;
+      --accent:   #7FA3E8;
+      --accent-w: #1A2740;
+      --danger:   #E8837C;
+      --danger-w: #33191A;
+      --ok:       #6BC49F;
+      --ok-w:     #122A22;
+      --hold:     #D9B364;
+      --hold-w:   #2C2313;
+      --shadow:   0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0E131B;
+    --surface:  #161D28;
+    --sunk:     #1D2530;
+    --ink:      #E6EAF1;
+    --muted:    #9BA6B8;
+    --faint:    #6E7A8D;
+    --line:     #2A3340;
+    --line-hi:  #3B4757;
+    --accent:   #7FA3E8;
+    --accent-w: #1A2740;
+    --danger:   #E8837C;
+    --danger-w: #33191A;
+    --ok:       #6BC49F;
+    --ok-w:     #122A22;
+    --hold:     #D9B364;
+    --hold-w:   #2C2313;
+    --shadow:   0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    padding-inline: 20px;
+    padding-block: 40px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+
+  h1, h2, h3, .lab {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    text-wrap: balance;
+  }
+  h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -.015em; margin: 0 0 6px; line-height: 1.1; }
+  h2 { font-size: 1.28rem; font-weight: 700; margin: 0; letter-spacing: -.005em; }
+  h3 { font-size: 1rem; font-weight: 600; margin: 0 0 8px; }
+  p  { margin: 0 0 12px; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); }
+
+  .lab {
+    font-size: .69rem; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--faint);
+  }
+
+  /* ---- masthead ---- */
+  .top { border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+  .sub { color: var(--muted); font-size: 1.02rem; margin: 0; max-width: 60ch; }
+
+  .strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 3px; overflow: hidden; margin-top: 22px;
+  }
+  .strip div { background: var(--surface); padding: 11px 13px; }
+  .strip b {
+    display: block; font-family: "IBM Plex Mono", monospace;
+    font-size: 1.12rem; font-weight: 500; font-variant-numeric: tabular-nums;
+    margin-top: 3px;
+  }
+
+  /* ---- steps ---- */
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 18px; align-items: start; }
+  .num {
+    font-family: "IBM Plex Mono", monospace; font-size: 1.5rem; font-weight: 500;
+    color: var(--accent); line-height: 1; padding-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .num small { display: block; font-size: .6rem; letter-spacing: .1em; color: var(--faint); margin-top: 7px; }
+  .body { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .goal { color: var(--muted); margin: 6px 0 0; }
+
+  ol.sub { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; }
+  ol.sub > li::marker { color: var(--faint); font-family: "IBM Plex Mono", monospace; font-size: .85em; }
+  ol.sub > li > :first-child { margin-top: 0; }
+  .inline-note {
+    display: block; color: var(--muted); font-size: .88rem;
+    line-height: 1.55; margin-top: 6px; max-width: 62ch;
+    border-left: 2px solid var(--line); padding-left: 10px;
+  }
+
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .87em;
+    background: var(--sunk); padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  pre {
+    font-family: "IBM Plex Mono", monospace; font-size: .82rem; line-height: 1.6;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px 14px; margin: 10px 0 0; overflow-x: auto;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+
+  .note {
+    border-left: 3px solid var(--line-hi); padding: 10px 0 10px 14px;
+    color: var(--muted); font-size: .93rem;
+  }
+  .check { border-left-color: var(--ok); background: var(--ok-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .check .lab { color: var(--ok); }
+  .gate  { border-left-color: var(--danger); background: var(--danger-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .gate .lab { color: var(--danger); }
+  .hold  { border-left-color: var(--hold); background: var(--hold-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .hold .lab { color: var(--hold); }
+  .note .lab { display: block; margin-bottom: 3px; }
+
+  .dep {
+    font-family: "IBM Plex Mono", monospace; font-size: .74rem;
+    color: var(--muted); background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 10px; display: inline-block;
+  }
+
+  hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* ---- closing blocks ---- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 5px; padding: 20px 22px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  ul.plain { margin: 0; padding-left: 19px; display: flex; flex-direction: column; gap: 8px; }
+  ul.plain li::marker { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: "IBM Plex Sans Condensed", sans-serif; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  td:first-child { font-family: "IBM Plex Mono", monospace; font-size: .84em; white-space: nowrap; color: var(--accent); }
+  .scroll { overflow-x: auto; }
+
+  @media (max-width: 460px) {
+    h1 { font-size: 2rem; }
+    .step { grid-template-columns: 34px 1fr; gap: 12px; }
+    .num { font-size: 1.2rem; }
+  }
+</style>
+<style>
+.cards{display:grid;gap:14px}
+.card{display:block;text-decoration:none;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:18px 20px;box-shadow:var(--shadow)}
+.card:hover{border-color:var(--accent)}
+.card h2{color:var(--accent);margin-bottom:6px}
+.card p{color:var(--muted);margin:0}
+footer{color:var(--muted);font-size:.85rem;border-top:1px solid var(--line);padding-top:16px}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="lab">Isaac Sim 5.1.0 &middot; RTX 50-series &middot; checked September 2026</p>
+  <h1>Isaac Sim crashes on open with a 595.xx driver</h1>
+  <p class="sub">Isaac Sim 5.1.0 crashes at startup on RTX 50-series (Blackwell) cards running any 595.xx NVIDIA driver. The fix is to downgrade to Studio Driver 591.74. I hit this on September 2, 2026, on an RTX 5080 running driver 595.95, while setting up our robotics workstation.</p>
+</header>
+
+<section class="step"><div class="num">01</div><div class="body">
+  <div><h2>Confirm it is this bug</h2></div>
+  <p>The crash shows up in <code>omni.kit.window.preferences</code> or <code>rtx.scenedb.plugin.dll</code>. Those are symptoms. NVIDIA staff on the Isaac Sim developer forum put the real cause in the Vulkan rendering path on the 595.xx driver branch.</p>
+  <pre><code>nvidia-smi</code></pre>
+  <p>If the driver version starts with 595, this is your crash. Windows logs are in <code>C:\Users\&lt;user&gt;\AppData\Local\ov\logs\Kit\</code>.</p>
+</div></section>
+<hr>
+<section class="step"><div class="num">02</div><div class="body">
+  <div><h2>Downgrade to Studio Driver 591.74</h2></div>
+  <ol class="sub">
+    <li>Download Studio Driver 591.74 from NVIDIA's driver page.</li>
+    <li>Run the installer, choose <b>Custom (Advanced)</b>, and tick <b>Perform a clean installation</b>.</li>
+    <li>Reboot.</li>
+    <li>Clear <code>C:\Users\&lt;user&gt;\AppData\Local\ov\cache</code> before relaunching. Shader caches are driver-specific, and a stale one looks exactly like the bug coming back.</li>
+  </ol>
+  <div class="note"><span class="lab">Studio, not Game Ready</span>NVIDIA staff have said Game Ready drivers are not validated for Omniverse applications. I treat the Studio branch as a requirement.</div>
+  <div class="note"><span class="lab">If 591.74 still crashes</span>Fall back to 580.88, NVIDIA's officially tested driver for Isaac Sim 5.1.0. It is old for Blackwell, so try 591.74 first.</div>
+</div></section>
+<hr>
+<section class="step"><div class="num">03</div><div class="body">
+  <div><h2>Stop the driver from coming back</h2></div>
+  <p>Turn off automatic driver updates in the NVIDIA App. On a managed machine, Windows Update will push 595.xx back down at the next patch cycle and break Isaac Sim again, so ask IT to hold the driver version.</p>
+</div></section>
+<hr>
+<div class="note hold"><span class="lab">What does not fix it</span>Clearing the shader cache on its own, forcing the D3D12 renderer in GUI mode, disabling the hotkeys extension, changing Isaac Lab versions, and rebuilding the conda environment. Others tried all of these before me.</div>
+<div class="note check"><span class="lab">If you cannot downgrade yet</span>Headless mode with the D3D12 renderer runs fine even on the broken driver. RL training is headless anyway, so the bug blocks looking at the simulation, not training in it.</div>
+<div class="note gate"><span class="lab">Why I did not upgrade to Isaac Sim 6.0 instead</span>Isaac Sim 6.0 with Isaac Lab 3.0.0-beta2 runs on current drivers. But <code>unitree_rl_lab</code>, the training repo I use for our Go2, targets Isaac Lab 2.3.0 exactly. Putting it on a beta with a major version bump means debugging someone else's API migration. My decision: pin the driver, not the stack, and move to 6.0 when the training repo does.</div>
+<footer>Written by Ben Wood, Digital Learning Coordinator, STEM Innovation Academy, Calgary. <a href="../">All robotics notes</a>.</footer>
+</div>
+</body>
+</html>
