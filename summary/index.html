@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unitree Robotics Program: Technical Summary</title>
+<meta name="description" content="A sim-to-real reinforcement learning pipeline for a Unitree Go2, and commissioning of a Unitree R1 humanoid, at STEM Innovation Academy.">
+<meta name="author" content="Ben Wood, STEM Innovation Academy">
+<style>body{margin:0}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:   #F5F7FA;
+    --surface:  #FFFFFF;
+    --sunk:     #EDF0F5;
+    --ink:      #141A24;
+    --muted:    #5A6577;
+    --faint:    #8A94A6;
+    --line:     #DCE1E9;
+    --line-hi:  #C3CBD8;
+    --accent:   #2A4A8F;
+    --accent-w: #E8EDF8;
+    --danger:   #9E2B25;
+    --danger-w: #FBEDEC;
+    --ok:       #1D6349;
+    --ok-w:     #E7F2ED;
+    --hold:     #7A5A16;
+    --hold-w:   #FAF1DC;
+    --shadow:   0 1px 2px rgba(20,26,36,.05), 0 4px 14px rgba(20,26,36,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0E131B;
+      --surface:  #161D28;
+      --sunk:     #1D2530;
+      --ink:      #E6EAF1;
+      --muted:    #9BA6B8;
+      --faint:    #6E7A8D;
+      --line:     #2A3340;
+      --line-hi:  #3B4757;
+      --accent:   #7FA3E8;
+      --accent-w: #1A2740;
+      --danger:   #E8837C;
+      --danger-w: #33191A;
+      --ok:       #6BC49F;
+      --ok-w:     #122A22;
+      --hold:     #D9B364;
+      --hold-w:   #2C2313;
+      --shadow:   0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0E131B;
+    --surface:  #161D28;
+    --sunk:     #1D2530;
+    --ink:      #E6EAF1;
+    --muted:    #9BA6B8;
+    --faint:    #6E7A8D;
+    --line:     #2A3340;
+    --line-hi:  #3B4757;
+    --accent:   #7FA3E8;
+    --accent-w: #1A2740;
+    --danger:   #E8837C;
+    --danger-w: #33191A;
+    --ok:       #6BC49F;
+    --ok-w:     #122A22;
+    --hold:     #D9B364;
+    --hold-w:   #2C2313;
+    --shadow:   0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    padding-inline: 20px;
+    padding-block: 40px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+
+  h1, h2, h3, .lab {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    text-wrap: balance;
+  }
+  h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -.015em; margin: 0 0 6px; line-height: 1.1; }
+  h2 { font-size: 1.28rem; font-weight: 700; margin: 0; letter-spacing: -.005em; }
+  h3 { font-size: 1rem; font-weight: 600; margin: 0 0 8px; }
+  p  { margin: 0 0 12px; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); }
+
+  .lab {
+    font-size: .69rem; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--faint);
+  }
+
+  /* ---- masthead ---- */
+  .top { border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+  .sub { color: var(--muted); font-size: 1.02rem; margin: 0; max-width: 60ch; }
+
+  .strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 3px; overflow: hidden; margin-top: 22px;
+  }
+  .strip div { background: var(--surface); padding: 11px 13px; }
+  .strip b {
+    display: block; font-family: "IBM Plex Mono", monospace;
+    font-size: 1.12rem; font-weight: 500; font-variant-numeric: tabular-nums;
+    margin-top: 3px;
+  }
+
+  /* ---- steps ---- */
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 18px; align-items: start; }
+  .num {
+    font-family: "IBM Plex Mono", monospace; font-size: 1.5rem; font-weight: 500;
+    color: var(--accent); line-height: 1; padding-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .num small { display: block; font-size: .6rem; letter-spacing: .1em; color: var(--faint); margin-top: 7px; }
+  .body { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .goal { color: var(--muted); margin: 6px 0 0; }
+
+  ol.sub { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; }
+  ol.sub > li::marker { color: var(--faint); font-family: "IBM Plex Mono", monospace; font-size: .85em; }
+  ol.sub > li > :first-child { margin-top: 0; }
+  .inline-note {
+    display: block; color: var(--muted); font-size: .88rem;
+    line-height: 1.55; margin-top: 6px; max-width: 62ch;
+    border-left: 2px solid var(--line); padding-left: 10px;
+  }
+
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .87em;
+    background: var(--sunk); padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  pre {
+    font-family: "IBM Plex Mono", monospace; font-size: .82rem; line-height: 1.6;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px 14px; margin: 10px 0 0; overflow-x: auto;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+
+  .note {
+    border-left: 3px solid var(--line-hi); padding: 10px 0 10px 14px;
+    color: var(--muted); font-size: .93rem;
+  }
+  .check { border-left-color: var(--ok); background: var(--ok-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .check .lab { color: var(--ok); }
+  .gate  { border-left-color: var(--danger); background: var(--danger-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .gate .lab { color: var(--danger); }
+  .hold  { border-left-color: var(--hold); background: var(--hold-w); padding-right: 14px; border-radius: 0 3px 3px 0; color: var(--ink); }
+  .hold .lab { color: var(--hold); }
+  .note .lab { display: block; margin-bottom: 3px; }
+
+  .dep {
+    font-family: "IBM Plex Mono", monospace; font-size: .74rem;
+    color: var(--muted); background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 10px; display: inline-block;
+  }
+
+  hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* ---- closing blocks ---- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 5px; padding: 20px 22px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  ul.plain { margin: 0; padding-left: 19px; display: flex; flex-direction: column; gap: 8px; }
+  ul.plain li::marker { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: "IBM Plex Sans Condensed", sans-serif; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  td:first-child { font-family: "IBM Plex Mono", monospace; font-size: .84em; white-space: nowrap; color: var(--accent); }
+  .scroll { overflow-x: auto; }
+
+  @media (max-width: 460px) {
+    h1 { font-size: 2rem; }
+    .step { grid-template-columns: 34px 1fr; gap: 12px; }
+    .num { font-size: 1.2rem; }
+  }
+</style>
+<style>
+.doc h2{margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.doc p,.doc li{max-width:68ch}.doc ul{padding-left:20px}.doc li{margin-bottom:6px}
+.doc table{margin:4px 0 14px}.doc td:first-child{font-family:inherit;font-size:inherit;white-space:normal;color:var(--ink);font-weight:600}
+.pipe{list-style:none;padding:0;margin:18px 0 10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.pipe li{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:4px;padding:10px 11px;display:flex;flex-direction:column;gap:3px;max-width:none;margin:0}
+.pipe .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--faint)}
+.pipe b{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1rem}
+.pipe li span:last-child{font-size:.82rem;color:var(--muted);line-height:1.4}
+footer{color:var(--muted);font-size:.85rem;border-top:1px solid var(--line);padding-top:16px;margin-top:30px}footer a{color:inherit}
+</style>
+</head>
+<body>
+<div class="wrap" style="gap:0">
+<header class="top">
+  <p class="lab">STEM Innovation Academy &middot; November 2026 &middot; Ben Wood</p>
+  <h1>Unitree Robotics Program: Technical Summary</h1>
+</header>
+<article class="doc">
+<h2>Overview</h2>
+<p>I built a working sim-to-real reinforcement learning pipeline for a Unitree Go2 quadruped. I trained a walking policy in NVIDIA Isaac Lab, validated it in MuJoCo, and deployed it to the robot's onboard computer. On 21 October 2026 the robot walked on hardware using my policy.</p>
+<p>I led the evaluation, procurement and commissioning of two robots for STEM Innovation Academy (Calgary):</p>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>Robot</th>
+<th>Model</th>
+<th>Name</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Quadruped</td>
+<td>Unitree Go2 EDU U3</td>
+<td>Kepler</td>
+<td>Custom RL policy running on hardware</td>
+</tr>
+<tr>
+<td>Humanoid</td>
+<td>Unitree R1 Edu Pro C</td>
+<td>Vera</td>
+<td>Commissioned; SDK motion, arm actions and dexterous hands working</td>
+</tr>
+</tbody>
+</table></div>
+<p>The goal is instructional. Students will learn robotics through SDK programming, ROS and reinforcement learning, not through vendor demos. I am building my own fluency on both platforms first, and the curriculum follows from that.</p>
+<ol class="pipe" aria-label="Kepler sim-to-real pipeline, 6 stages"><li><span class="n">1</span><b>Train</b><span>Isaac Lab, PPO via RSL-RL</span></li><li><span class="n">2</span><b>Export</b><span>ONNX policy, 758 KB</span></li><li><span class="n">3</span><b>Validate</b><span>MuJoCo harness, 7 of 7</span></li><li><span class="n">4</span><b>Transfer</b><span>Policy and deploy.yaml, MD5 check</span></li><li><span class="n">5</span><b>Release</b><span>DDS tool frees the motors</span></li><li><span class="n">6</span><b>Deploy</b><span>go2_ctrl on the Jetson, 50 Hz</span></li></ol>
+<p>Training and validation run on one Windows machine. Only the 758 KB policy and its config cross to the robot.</p>
+<h2>Hardware and infrastructure</h2>
+<p>I specified and set up a Windows-only workstation and avoided a dual-boot setup. Training runs natively on Windows, validation runs in Python, and deployment runs on the robot's own computer.</p>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Specification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Workstation</td>
+<td>CyberPowerPC, NVIDIA RTX 5080 (Blackwell sm_120, 16 GB VRAM), Windows 11</td>
+</tr>
+<tr>
+<td>Simulation stack</td>
+<td>Isaac Sim 5.1.0, Isaac Lab 2.3.2, Python 3.11, PyTorch 2.7 (CUDA 12.8)</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>MuJoCo 3.13 with onnxruntime</td>
+</tr>
+<tr>
+<td>Kepler onboard computer</td>
+<td>NVIDIA Jetson, Ubuntu 20.04, aarch64, CPU-only inference</td>
+</tr>
+<tr>
+<td>Vera onboard computer</td>
+<td>Jetson Orin NX, JetPack L4T R35.3.1, ROS 2 Foxy, 16 GB RAM</td>
+</tr>
+<tr>
+<td>Network</td>
+<td>Isolated wired robot subnet (192.168.123.0/24), no internet on the robot side</td>
+</tr>
+</tbody>
+</table></div>
+<p>I mapped each robot's network myself. The two platforms use the same addresses for different roles. On Kepler, the Jetson is .18 and the motor control board is .161. On Vera, .161 is the control board and the Orin is .164, reachable only through the compute backpack's own port. Vera's backpack arrived with its power and network leads unconnected, and I found and fixed that during commissioning.</p>
+<h2>Simulation and training</h2>
+<p>I trained a velocity-tracking locomotion policy for the Go2 with Unitree's <code>unitree_rl_lab</code> on Isaac Lab, using PPO through RSL-RL. The policy is a 512/256/128 MLP, about 188,000 parameters, running at 50 Hz.</p>
+<ul>
+<li><strong>Run length:</strong> 23,043 of a planned 50,000 iterations. Reward plateaued near iteration 6,000, so stopping early cost nothing.</li>
+<li><strong>Episode outcomes:</strong> 99.7% ended at timeout, 0.2% on base contact, 0.1% on bad orientation.</li>
+<li><strong>Tracking error:</strong> 0.169 linear, 0.182 yaw.</li>
+<li><strong>Export:</strong> ONNX, 758 KB. Only the policy and its <code>deploy.yaml</code> go to the robot. The other 1.07 GB of checkpoints stay on the workstation.</li>
+</ul>
+<p>I also imported Vera into Isaac Sim from the <code>r1_description</code> URDF. Unitree's Isaac Lab repo does not support the R1. I tracked a second first-party repo, <code>unitree_rl_mjlab</code>, which lists R1 support but has no worked R1 example yet.</p>
+<h2>Sim-to-sim validation and deployment</h2>
+<p>The policy passed 7 of 7 MuJoCo tests on flat ground before it went near hardware. I wrote a Python harness that runs MuJoCo and onnxruntime directly. That removed the need for WSL2, DDS and admin rights on the workstation. The harness resolves every joint by name, because Isaac Lab, the SDK and MuJoCo each use a different joint order.</p>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Command</th>
+<th>Achieved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stand</td>
+<td>0</td>
+<td>0.000</td>
+</tr>
+<tr>
+<td>Walk forward</td>
+<td>vx 0.50 m/s</td>
+<td>0.348</td>
+</tr>
+<tr>
+<td>Walk fast</td>
+<td>vx 1.00 m/s</td>
+<td>0.776</td>
+</tr>
+<tr>
+<td>Walk back</td>
+<td>vx -0.50 m/s</td>
+<td>-0.324</td>
+</tr>
+<tr>
+<td>Strafe left</td>
+<td>vy 0.40 m/s</td>
+<td>0.247</td>
+</tr>
+<tr>
+<td>Turn in place</td>
+<td>wz 1.00 rad/s</td>
+<td>0.613</td>
+</tr>
+<tr>
+<td>Arc</td>
+<td>vx 0.50 / wz 0.50</td>
+<td>0.356 / 0.293</td>
+</tr>
+</tbody>
+</table></div>
+<p>Body height held at 0.32 to 0.35 m. Peak torque was 21.6 Nm, under the 23.7 Nm hip limit. Every command tracked in the right direction at 60 to 78% of magnitude, which is the safe way to be wrong.</p>
+<p>For deployment, I built Unitree's C++ controller (<code>go2_ctrl</code>) on Kepler's Jetson with the aarch64 build of onnxruntime and <code>unitree_sdk2</code>. I wrote a small service tool to release the motors from the factory controller over DDS, and a PowerShell script that redeploys a new policy and checks it by MD5 hash. On 21 October 2026, Kepler walked forward on my policy.</p>
+<h2>Problems I diagnosed and solved</h2>
+<p>None of these were documented, and most had misleading error messages.</p>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Root cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Controller aborted before <code>main</code> on every run</td>
+<td>The Jetson boots with 4 of 8 cores offline. onnxruntime indexes per-CPU data that only exists for online cores. I traced it with gdb to the library loader.</td>
+<td>Bring the cores online at launch</td>
+</tr>
+<tr>
+<td><code>systemctl stop sport_mode</code> could not free the motors</td>
+<td>The motor service runs on a separate control board with no shell</td>
+<td>Wrote a DDS tool using <code>RobotStateClient</code> to switch the service off</td>
+</tr>
+<tr>
+<td>Shared libraries reported "file too short"</td>
+<td>Git on Windows saves symlinks as text files, and scp carried them across</td>
+<td>Recreated the links; moved files as tarballs from then on</td>
+</tr>
+<tr>
+<td>Compile errors mixing SDK headers</td>
+<td>Factory SDK and new SDK ship incompatible CycloneDDS versions</td>
+<td>Installed the new SDK to a private prefix; rewrote the CMake to use <code>find_package</code></td>
+</tr>
+<tr>
+<td>First MuJoCo walks fell at 2 to 3 seconds</td>
+<td>The default scene contains a stair course</td>
+<td>Built a flat scene file; not a policy fault</td>
+</tr>
+<tr>
+<td>Builds misjudged timestamps</td>
+<td>No real-time clock on the Jetson; it boots in 1970</td>
+<td>Set the clock before every build</td>
+</tr>
+<tr>
+<td>Turning <code>sport_mode</code> back on fails (error 5201)</td>
+<td>Unknown; possibly an SDK and firmware version mismatch</td>
+<td>Full power cycle restores it; raised with the vendor</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Current status and next steps</h2>
+<p>Kepler walks forward on a flat-ground policy. Strafing was weak on hardware, and I traced it to the training configuration, not to the robot.</p>
+<ul>
+<li><strong>Strafe:</strong> the command curriculum capped lateral speed at ±0.4 m/s, 2.5 times narrower than forward. I am raising it to ±0.8.</li>
+<li><strong>Terrain:</strong> every rough sub-terrain in the training config was commented out, so the terrain curriculum never had anything to promote to. I am enabling slopes, stairs, boxes and rough ground for the next run.</li>
+<li><strong>Redeploy:</strong> a retrain is now four steps: edit the config, train, export, run the redeploy script. Nothing is rebuilt on the robot.</li>
+</ul>
+<p>Vera is commissioned. I command locomotion states through the SDK's <code>r1_loco_client</code>, run 22 vendor arm actions, and drive the BrainCo dexterous hands over DDS. I wrote a safety rule for her: she never enters the RL locomotion state with her feet off the ground. Her RL path waits until Unitree's R1 support matures.</p>
+<p><strong>Curriculum direction:</strong> the pipeline I built maps to a student sequence. Students start with simulation and reward design in Isaac Lab, move to validation in MuJoCo, and finish with deployment to real hardware. Mapping the curriculum across both robots is the next phase.</p>
+<h2>Skills demonstrated</h2>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Tools and techniques</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reinforcement learning</td>
+<td>Isaac Lab, RSL-RL (PPO), curriculum design, TensorBoard diagnosis, ONNX export</td>
+</tr>
+<tr>
+<td>Simulation</td>
+<td>Isaac Sim, MuJoCo, URDF and USD asset import, sim-to-sim validation</td>
+</tr>
+<tr>
+<td>Embedded Linux</td>
+<td>NVIDIA Jetson, Ubuntu 20.04, aarch64 builds, CPU and power mode control</td>
+</tr>
+<tr>
+<td>Robot software</td>
+<td>unitree_sdk2 (C++), CycloneDDS, ROS 2 Foxy, CMake, gdb</td>
+</tr>
+<tr>
+<td>Systems and networking</td>
+<td>Isolated robot subnets, SSH, PowerShell and batch deployment scripts</td>
+</tr>
+<tr>
+<td>Program leadership</td>
+<td>Platform evaluation, procurement report with landed costs, vendor liaison, safety procedures</td>
+</tr>
+</tbody>
+</table></div>
+</article>
+<footer>Written by Ben Wood, Digital Learning Coordinator, STEM Innovation Academy, Calgary. Step-by-step detail: <a href="../kepler/">Kepler Sim-to-Real</a> &middot; <a href="../vera/">Vera Bring-Up</a> &middot; <a href="../">All robotics notes</a>.</footer>
+</div>
+</body>
+</html>
